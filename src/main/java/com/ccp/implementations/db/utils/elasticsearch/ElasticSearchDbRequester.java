@@ -28,8 +28,8 @@ import com.ccp.especifications.db.utils.decorators.engine.CcpEntityFactory;
 import com.ccp.especifications.http.CcpHttpHandler;
 import com.ccp.especifications.http.CcpHttpRequester;
 import com.ccp.especifications.http.CcpHttpResponseTransform;
-import com.ccp.exceptions.db.utils.CcpIncorrectEntityFields;
-import com.ccp.exceptions.inputstream.CcpMissingInputStream;
+import com.ccp.exceptions.db.utils.CcpErrorDbUtilsIncorrectEntityFields;
+import com.ccp.exceptions.inputstream.CcpErrorInputStreamMissing;
 import com.ccp.http.CcpHttpMethods;
 
 class ElasticSearchDbRequester implements CcpDbRequester {
@@ -46,7 +46,7 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 			CcpStringDecorator ccpStringDecorator = new CcpStringDecorator("application_properties");
 			CcpPropertiesDecorator propertiesFrom = ccpStringDecorator.propertiesFrom();
 			systemProperties = propertiesFrom.environmentVariablesOrClassLoaderOrFile();
-		} catch (CcpMissingInputStream e) {
+		} catch (CcpErrorInputStreamMissing e) {
 			systemProperties = CcpOtherConstants.EMPTY_JSON
 					.put("elasticsearch.address", "http://localhost:9200")
 					.put("elasticsearch.secret", "")
@@ -127,7 +127,7 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 
 		CcpDbRequester database = CcpDependencyInjection.getDependency(CcpDbRequester.class);
 		
-		Consumer<CcpIncorrectEntityFields> whenIsIncorrectMapping = e -> {
+		Consumer<CcpErrorDbUtilsIncorrectEntityFields> whenIsIncorrectMapping = e -> {
 			String message = e.getMessage();
 			mappingJnEntitiesErrorsFile.append(message);
 		};
@@ -150,7 +150,7 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 		return this;
 	}
 
-	public List<CcpBulkOperationResult> executeDatabaseSetup(String pathToJavaClasses, String hostFolder, String pathToCreateEntityScript,	Consumer<CcpIncorrectEntityFields> whenTheFieldsInTheEntityAreIncorrect,	Consumer<Throwable> whenOccursAnUnhadledError) {
+	public List<CcpBulkOperationResult> executeDatabaseSetup(String pathToJavaClasses, String hostFolder, String pathToCreateEntityScript,	Consumer<CcpErrorDbUtilsIncorrectEntityFields> whenTheFieldsInTheEntityAreIncorrect,	Consumer<Throwable> whenOccursAnUnhadledError) {
 		this.loadConnectionProperties();
 		CcpHttpRequester http = CcpDependencyInjection.getDependency(CcpHttpRequester.class);
 		CcpFolderDecorator folderJava = new CcpStringDecorator(pathToJavaClasses).folder();
@@ -196,7 +196,7 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 				this.recreateEntityTwin(http, factory, scriptToCreateEntity, dbUrl);
 				List<CcpBulkItem> firstRecordsToInsert = configurator.getFirstRecordsToInsert();
 				bulkItems.addAll(firstRecordsToInsert);
-			}catch(CcpIncorrectEntityFields e) {
+			}catch(CcpErrorDbUtilsIncorrectEntityFields e) {
 				whenTheFieldsInTheEntityAreIncorrect.accept(e);
 			}catch (Throwable e) {
 				whenOccursAnUnhadledError.accept(e);
@@ -251,7 +251,7 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 		
 		if(isNotStrict) {
 			String messageError = String.format("The entity '%s' does not have the dynamic properties equals to strict. The script to this entity is %s", dynamic, scriptToCreateEntityAsJson);
-			throw new CcpIncorrectEntityFields(messageError);
+			throw new CcpErrorDbUtilsIncorrectEntityFields(messageError);
 		}
 		
 		CcpJsonRepresentation propertiesJson = mappings.getInnerJson("properties");
@@ -271,13 +271,13 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 		boolean missingsInClass = isInScriptButIsNotInClass.isEmpty() == false;
 		
 		if(missingsInClass) {
-			throw new CcpIncorrectEntityFields(messageError);
+			throw new CcpErrorDbUtilsIncorrectEntityFields(messageError);
 		}
 		
 		boolean missingsInScript = isInClassButIsNotInScript.isEmpty() == false;
 
 		if(missingsInScript) {
-			throw new CcpIncorrectEntityFields(messageError);
+			throw new CcpErrorDbUtilsIncorrectEntityFields(messageError);
 		}
 		return this;
 	}
