@@ -1,7 +1,6 @@
 package com.ccp.implementations.db.utils.elasticsearch;
 
 import java.io.File;
-import java.lang.reflect.Constructor;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -15,6 +14,7 @@ import com.ccp.decorators.CcpFileDecorator;
 import com.ccp.decorators.CcpFolderDecorator;
 import com.ccp.decorators.CcpJsonRepresentation;
 import com.ccp.decorators.CcpPropertiesDecorator;
+import com.ccp.decorators.CcpReflectionConstructorDecorator;
 import com.ccp.decorators.CcpStringDecorator;
 import com.ccp.dependency.injection.CcpDependencyInjection;
 import com.ccp.especifications.db.bulk.CcpBulkItem;
@@ -168,10 +168,9 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 			
 			try {
 				
-				Class<?> clazz = Class.forName(className);
-				Constructor<?> declaredConstructor = clazz.getDeclaredConstructor();
-				declaredConstructor.setAccessible(true);
-				Object newInstance = declaredConstructor.newInstance();
+				CcpReflectionConstructorDecorator reflection = new CcpStringDecorator(className).reflection();
+				Class<?> clazz = reflection.forName();
+				Object newInstance = reflection.newInstance();
 				
 				boolean virtualEntity = newInstance instanceof CcpEntityConfigurator == false;
 				
