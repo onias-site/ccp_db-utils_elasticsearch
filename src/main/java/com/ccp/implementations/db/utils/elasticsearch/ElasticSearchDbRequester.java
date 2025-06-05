@@ -169,6 +169,13 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 			try {
 				
 				CcpReflectionConstructorDecorator reflection = new CcpStringDecorator(className).reflection();
+				
+				boolean thisClassDoesNotExist = reflection.thisClassExists() == false;
+				
+				if(thisClassDoesNotExist) {
+					return;
+				}
+
 				Class<?> clazz = reflection.forName();
 				Object newInstance = reflection.newInstance();
 				
