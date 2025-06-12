@@ -210,7 +210,7 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 
 		});	
 		CcpDbBulkExecutor bulk = CcpDependencyInjection.getDependency(CcpDbBulkExecutor.class);
-		bulk.addRecords(bulkItems);
+		bulk = bulk.addRecords(bulkItems);
 		List<CcpBulkOperationResult> bulkOperationResult = bulk.getBulkOperationResult();
 		return bulkOperationResult;
 	}
