@@ -10,13 +10,14 @@ import java.util.stream.Collectors;
 
 import com.ccp.constantes.CcpOtherConstants;
 import com.ccp.decorators.CcpCollectionDecorator;
+import com.ccp.decorators.CcpErrorInputStreamMissing;
 import com.ccp.decorators.CcpFileDecorator;
 import com.ccp.decorators.CcpFolderDecorator;
 import com.ccp.decorators.CcpJsonRepresentation;
+import com.ccp.decorators.CcpJsonRepresentation.CcpJsonFieldName;
 import com.ccp.decorators.CcpPropertiesDecorator;
 import com.ccp.decorators.CcpReflectionConstructorDecorator;
 import com.ccp.decorators.CcpStringDecorator;
-import com.ccp.decorators.CcpJsonRepresentation.CcpJsonFieldName;
 import com.ccp.dependency.injection.CcpDependencyInjection;
 import com.ccp.especifications.db.bulk.CcpBulkItem;
 import com.ccp.especifications.db.bulk.CcpBulkOperationResult;
@@ -24,24 +25,24 @@ import com.ccp.especifications.db.bulk.CcpDbBulkExecutor;
 import com.ccp.especifications.db.utils.CcpDbRequester;
 import com.ccp.especifications.db.utils.CcpEntity;
 import com.ccp.especifications.db.utils.CcpEntityField;
+import com.ccp.especifications.db.utils.CcpErrorDbUtilsIncorrectEntityFields;
 import com.ccp.especifications.db.utils.decorators.engine.CcpEntityConfigurator;
 import com.ccp.especifications.db.utils.decorators.engine.CcpEntityFactory;
 import com.ccp.especifications.http.CcpHttpHandler;
+import com.ccp.especifications.http.CcpHttpMethods;
 import com.ccp.especifications.http.CcpHttpRequester;
 import com.ccp.especifications.http.CcpHttpResponseTransform;
-import com.ccp.exceptions.db.utils.CcpErrorDbUtilsIncorrectEntityFields;
-import com.ccp.exceptions.inputstream.CcpErrorInputStreamMissing;
-import com.ccp.http.CcpHttpMethods;
+import com.ccp.implementations.db.utils.elasticsearch.ElasticSearchDbRequesterSpecialWords.JsonFieldNames;
 
-enum ElasticSearchDbRequesterConstants implements CcpJsonFieldName{
-	Accept, DB_URL, mappings, dynamic, properties, Authorization
-	
-}
 enum ElasticSearchDbRequesterSpecialWords implements CcpJsonFieldName{
 	elasticsearch_address("elasticsearch.address"),
 	elasticsearch_secret("elasticsearch.secret"),
 	Content_Type("Content-Type"),
 ;
+	static enum JsonFieldNames implements CcpJsonFieldName{
+		Accept, DB_URL, mappings, dynamic, properties, Authorization
+		
+	}
 	private final String value;
 	
 	private ElasticSearchDbRequesterSpecialWords(String value) {
@@ -80,12 +81,12 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 				.putIfNotContains(ElasticSearchDbRequesterSpecialWords.elasticsearch_secret, "");
 
 		CcpJsonRepresentation subMap = putIfNotContains.getJsonPiece(ElasticSearchDbRequesterSpecialWords.elasticsearch_address, ElasticSearchDbRequesterSpecialWords.elasticsearch_secret)
-				.renameField(ElasticSearchDbRequesterSpecialWords.elasticsearch_address, ElasticSearchDbRequesterConstants.DB_URL).renameField(ElasticSearchDbRequesterSpecialWords.elasticsearch_secret, ElasticSearchDbRequesterConstants.Authorization)
+				.renameField(ElasticSearchDbRequesterSpecialWords.elasticsearch_address, JsonFieldNames.DB_URL).renameField(ElasticSearchDbRequesterSpecialWords.elasticsearch_secret, JsonFieldNames.Authorization)
 				;
 		
 		this.connectionDetails = subMap
 				.put(ElasticSearchDbRequesterSpecialWords.Content_Type, "application/json")
-				.put(ElasticSearchDbRequesterConstants.Accept, "application/json")
+				.put(JsonFieldNames.Accept, "application/json")
 				;
 		return this;
 	}
@@ -95,7 +96,7 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 		this.loadConnectionProperties();;
 		headers = this.connectionDetails.putAll(headers);
 		CcpHttpHandler http = new CcpHttpHandler(expectedStatus);
-		String path = this.connectionDetails.getAsString(ElasticSearchDbRequesterConstants.DB_URL) + url;
+		String path = this.connectionDetails.getAsString(JsonFieldNames.DB_URL) + url;
 		V executeHttpRequest = http.executeHttpRequest(trace, path, method, headers, body, transformer);
 		return executeHttpRequest;
 	}
@@ -103,7 +104,7 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 	
 	public <V> V executeHttpRequest(String trace, String complemento, CcpHttpMethods method, Integer expectedStatus, CcpJsonRepresentation body,  String[] resources, CcpHttpResponseTransform<V> transformer) {
 		this.loadConnectionProperties();
-		String path = this.connectionDetails.getAsString(ElasticSearchDbRequesterConstants.DB_URL) + "/" +  Arrays.asList(resources).stream()
+		String path = this.connectionDetails.getAsString(JsonFieldNames.DB_URL) + "/" +  Arrays.asList(resources).stream()
 				.collect(Collectors.toList())
 				.toString()
 				.replace("[", "").replace("]", "").replace(" ", "") + complemento;
@@ -118,7 +119,7 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 		this.loadConnectionProperties();
 		CcpJsonRepresentation headers = this.connectionDetails;
 		CcpHttpHandler http = new CcpHttpHandler(flows);
-		String path = headers.getAsString(ElasticSearchDbRequesterConstants.DB_URL) + url;
+		String path = headers.getAsString(JsonFieldNames.DB_URL) + url;
 		V executeHttpRequest = http.executeHttpRequest(trace, path, method, headers, body, transformer);
 		
 		return executeHttpRequest;
@@ -129,7 +130,7 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 		this.loadConnectionProperties();
 		CcpJsonRepresentation headers = this.connectionDetails;
 		CcpHttpHandler http = new CcpHttpHandler(expectedStatus);
-		String path = headers.getAsString(ElasticSearchDbRequesterConstants.DB_URL) + url;
+		String path = headers.getAsString(JsonFieldNames.DB_URL) + url;
 		V executeHttpRequest = http.executeHttpRequest(trace, path, method, headers, body, transformer);
 		
 		return executeHttpRequest;
@@ -217,7 +218,7 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 				
 				this.validateEntityFields(entity, pathToCreateEntityScript, className);
 				
-				String dbUrl = this.connectionDetails.getAsString(ElasticSearchDbRequesterConstants.DB_URL);
+				String dbUrl = this.connectionDetails.getAsString(JsonFieldNames.DB_URL);
 				
 				String urlToEntity = dbUrl + "/" + entityName;
 				this.recreateEntity(http, scriptToCreateEntity, urlToEntity);
@@ -272,8 +273,8 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 		String entityName = entity.getEntityName();
 		String scriptToCreateEntity = this.getScriptToCreateEntity(pathToCreateEntityScript, entityName);
 		CcpJsonRepresentation scriptToCreateEntityAsJson = new CcpJsonRepresentation(scriptToCreateEntity);
-		CcpJsonRepresentation mappings = scriptToCreateEntityAsJson.getInnerJson(ElasticSearchDbRequesterConstants.mappings);
-		String dynamic = mappings.getAsString(ElasticSearchDbRequesterConstants.dynamic);
+		CcpJsonRepresentation mappings = scriptToCreateEntityAsJson.getInnerJson(JsonFieldNames.mappings);
+		String dynamic = mappings.getAsString(JsonFieldNames.dynamic);
 		
 		boolean isNotStrict = "strict".equals(dynamic) == false;
 		
@@ -282,7 +283,7 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 			throw new CcpErrorDbUtilsIncorrectEntityFields(messageError);
 		}
 		
-		CcpJsonRepresentation propertiesJson = mappings.getInnerJson(ElasticSearchDbRequesterConstants.properties);
+		CcpJsonRepresentation propertiesJson = mappings.getInnerJson(JsonFieldNames.properties);
 		Set<String> scriptFields = propertiesJson.fieldSet();
 		CcpEntityField[] fields = entity.getFields();
 		List<String> classFields = Arrays.asList(fields).stream().map(x -> x.name()).collect(Collectors.toList());
