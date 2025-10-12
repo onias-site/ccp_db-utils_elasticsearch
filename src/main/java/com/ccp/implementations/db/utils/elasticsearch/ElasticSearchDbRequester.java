@@ -202,11 +202,12 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 				Class<?> clazz = reflection.forName();
 				Object newInstance = reflection.newInstance();
 				
-				boolean virtualEntity = newInstance instanceof CcpEntityConfigurator == false;
+				boolean virtualEntity = false == newInstance instanceof CcpEntityConfigurator;
 				
 				if(virtualEntity) {
 					return;
 				}
+				
 				CcpEntityConfigurator configurator = (CcpEntityConfigurator) newInstance;
 
 				CcpEntityFactory factory = new CcpEntityFactory(clazz);
