@@ -60,7 +60,7 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 	private CcpJsonRepresentation connectionDetails = CcpOtherConstants.EMPTY_JSON;
 	
 	private CcpDbRequester loadConnectionProperties() {
-		boolean alreadyLoaded = this.connectionDetails.isEmpty() == false;
+		boolean alreadyLoaded = false == this.connectionDetails.isEmpty();
 		if(alreadyLoaded) {
 			return this;
 		}
@@ -193,7 +193,7 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 				
 				CcpReflectionConstructorDecorator reflection = new CcpStringDecorator(className).reflection();
 				
-				boolean thisClassDoesNotExist = reflection.thisClassExists() == false;
+				boolean thisClassDoesNotExist = false == reflection.thisClassExists();
 				
 				if(thisClassDoesNotExist) {
 					return;
@@ -244,7 +244,7 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 		
 		CcpEntity entity = factory.entityInstance;
 		
-		boolean hasNoTwinEntity = factory.hasTwinEntity == false;
+		boolean hasNoTwinEntity = false == factory.hasTwinEntity;
 		
 		if(hasNoTwinEntity) {
 			return this;
@@ -277,7 +277,7 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 		CcpJsonRepresentation mappings = scriptToCreateEntityAsJson.getInnerJson(JsonFieldNames.mappings);
 		String dynamic = mappings.getAsString(JsonFieldNames.dynamic);
 		
-		boolean isNotStrict = "strict".equals(dynamic) == false;
+		boolean isNotStrict = false == "strict".equals(dynamic);
 		
 		if(isNotStrict) {
 			String messageError = String.format("The entity '%s' does not have the dynamic properties equals to strict. The script to this entity is %s", dynamic, scriptToCreateEntityAsJson);
@@ -298,13 +298,13 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 				+ "fields that are in class but are not in script %s.\n "
 				+ "The script to this entity is %s", className, entityName, isInClassButIsNotInScript, 
 				isInScriptButIsNotInClass, scriptToCreateEntityAsJson);
-		boolean missingsInClass = isInScriptButIsNotInClass.isEmpty() == false;
+		boolean missingsInClass = false == isInScriptButIsNotInClass.isEmpty();
 		
 		if(missingsInClass) {
 			throw new CcpErrorDbUtilsIncorrectEntityFields(messageError);
 		}
 		
-		boolean missingsInScript = isInClassButIsNotInScript.isEmpty() == false;
+		boolean missingsInScript = false == isInClassButIsNotInScript.isEmpty();
 
 		if(missingsInScript) {
 			throw new CcpErrorDbUtilsIncorrectEntityFields(messageError);
