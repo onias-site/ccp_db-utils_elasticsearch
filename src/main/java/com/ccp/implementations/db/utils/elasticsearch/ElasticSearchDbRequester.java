@@ -21,13 +21,13 @@ import com.ccp.decorators.CcpStringDecorator;
 import com.ccp.dependency.injection.CcpDependencyInjection;
 import com.ccp.especifications.db.bulk.CcpBulkItem;
 import com.ccp.especifications.db.bulk.CcpBulkOperationResult;
-import com.ccp.especifications.db.bulk.CcpDbBulkExecutor;
+import com.ccp.especifications.db.bulk.CcpBulkExecutor;
 import com.ccp.especifications.db.utils.CcpDbRequester;
-import com.ccp.especifications.db.utils.CcpEntity;
-import com.ccp.especifications.db.utils.CcpEntityField;
-import com.ccp.especifications.db.utils.CcpErrorDbUtilsIncorrectEntityFields;
-import com.ccp.especifications.db.utils.decorators.engine.CcpEntityConfigurator;
-import com.ccp.especifications.db.utils.decorators.engine.CcpEntityFactory;
+import com.ccp.especifications.db.utils.entity.CcpEntity;
+import com.ccp.especifications.db.utils.entity.decorators.engine.CcpEntityConfigurator;
+import com.ccp.especifications.db.utils.entity.decorators.engine.CcpEntityFactory;
+import com.ccp.especifications.db.utils.entity.fields.CcpEntityField;
+import com.ccp.especifications.db.utils.entity.fields.CcpErrorDbUtilsIncorrectEntityFields;
 import com.ccp.especifications.http.CcpHttpHandler;
 import com.ccp.especifications.http.CcpHttpMethods;
 import com.ccp.especifications.http.CcpHttpRequester;
@@ -233,7 +233,7 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 			}
 
 		});	
-		CcpDbBulkExecutor bulk = CcpDependencyInjection.getDependency(CcpDbBulkExecutor.class);
+		CcpBulkExecutor bulk = CcpDependencyInjection.getDependency(CcpBulkExecutor.class);
 		bulk = bulk.addRecords(bulkItems);
 		List<CcpBulkOperationResult> bulkOperationResult = bulk.getBulkOperationResult();
 		return bulkOperationResult;
