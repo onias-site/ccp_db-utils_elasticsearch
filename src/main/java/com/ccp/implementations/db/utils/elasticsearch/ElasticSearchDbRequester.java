@@ -15,6 +15,7 @@ import com.ccp.decorators.CcpFileDecorator;
 import com.ccp.decorators.CcpFolderDecorator;
 import com.ccp.decorators.CcpJsonRepresentation;
 import com.ccp.decorators.CcpJsonRepresentation.CcpJsonFieldName;
+import com.ccp.decorators.CcpJsonRepresentation;
 import com.ccp.decorators.CcpPropertiesDecorator;
 import com.ccp.decorators.CcpReflectionConstructorDecorator;
 import com.ccp.decorators.CcpStringDecorator;
