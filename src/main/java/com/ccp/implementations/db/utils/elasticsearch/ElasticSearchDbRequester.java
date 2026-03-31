@@ -25,6 +25,7 @@ import com.ccp.especifications.db.bulk.CcpBulkExecutor;
 import com.ccp.especifications.db.utils.CcpDbRequester;
 import com.ccp.especifications.db.utils.entity.CcpEntity;
 import com.ccp.especifications.db.utils.entity.decorators.engine.CcpEntityConfigurator;
+import com.ccp.especifications.db.utils.entity.decorators.engine.CcpEntityDetails;
 import com.ccp.especifications.db.utils.entity.decorators.engine.CcpEntityFactory;
 import com.ccp.especifications.db.utils.entity.fields.CcpEntityField;
 import com.ccp.especifications.db.utils.entity.fields.CcpErrorDbUtilsIncorrectEntityFields;
@@ -214,14 +215,14 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 
 				CcpEntity entity = factory.entityInstance;
 				
-				String entityName = entity.getEntityName();
-				String scriptToCreateEntity = this.getScriptToCreateEntity(pathToCreateEntityScript, entityName);
+				CcpEntityDetails entityDetails = entity.getEntityDetails();
+				String scriptToCreateEntity = this.getScriptToCreateEntity(pathToCreateEntityScript, entityDetails.entityName);
 				
 				this.validateEntityFields(entity, pathToCreateEntityScript, className);
 				
 				String dbUrl = this.connectionDetails.getAsString(JsonFieldNames.DB_URL);
 				
-				String urlToEntity = dbUrl + "/" + entityName;
+				String urlToEntity = dbUrl + "/" + entityDetails.entityName;
 				this.recreateEntity(http, scriptToCreateEntity, urlToEntity);
 				this.recreateEntityTwin(http, factory, scriptToCreateEntity, dbUrl);
 				List<CcpBulkItem> firstRecordsToInsert = configurator.getFirstRecordsToInsert();
@@ -250,7 +251,8 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 			return this;
 		}
 		CcpEntity twinEntity = entity.getTwinEntity();
-		String entityNameTwin = twinEntity.getEntityName();
+		CcpEntityDetails entityDetails = twinEntity.getEntityDetails();
+		String entityNameTwin = entityDetails.entityName;
 		String urlToEntityTwin = dbUrl + "/" + entityNameTwin;
 		this.recreateEntity(http, scriptToCreateEntity, urlToEntityTwin);
 		return this;
@@ -271,8 +273,8 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 	
 	private CcpDbRequester validateEntityFields(CcpEntity entity, String pathToCreateEntityScript, String className) {
 		
-		String entityName = entity.getEntityName();
-		String scriptToCreateEntity = this.getScriptToCreateEntity(pathToCreateEntityScript, entityName);
+		CcpEntityDetails entityDetails = entity.getEntityDetails();
+		String scriptToCreateEntity = this.getScriptToCreateEntity(pathToCreateEntityScript, entityDetails.entityName);
 		CcpJsonRepresentation scriptToCreateEntityAsJson = new CcpJsonRepresentation(scriptToCreateEntity);
 		CcpJsonRepresentation mappings = scriptToCreateEntityAsJson.getInnerJson(JsonFieldNames.mappings);
 		String dynamic = mappings.getAsString(JsonFieldNames.dynamic);
@@ -286,7 +288,7 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 		
 		CcpJsonRepresentation propertiesJson = mappings.getInnerJson(JsonFieldNames.properties);
 		Set<String> scriptFields = propertiesJson.fieldSet();
-		CcpEntityField[] fields = entity.getFields();
+		CcpEntityField[] fields = entityDetails.allFields;
 		List<String> classFields = Arrays.asList(fields).stream().map(x -> x.name()).collect(Collectors.toList());
 		Object[] array = scriptFields.toArray(new String[scriptFields.size()]);
 		List<String> isInClassButIsNotInScript = new CcpCollectionDecorator(array).getExclusiveList(classFields);
@@ -296,7 +298,7 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 		String messageError = String.format("The class '%s'\n that belongs to the entity '%s'\n has an incorrect mapping, "
 				+ "fields that are in script but are not in class %s,\n "
 				+ "fields that are in class but are not in script %s.\n "
-				+ "The script to this entity is %s", className, entityName, isInClassButIsNotInScript, 
+				+ "The script to this entity is %s", className, entityDetails.entityName, isInClassButIsNotInScript, 
 				isInScriptButIsNotInClass, scriptToCreateEntityAsJson);
 		boolean missingsInClass = false == isInScriptButIsNotInClass.isEmpty();
 		
