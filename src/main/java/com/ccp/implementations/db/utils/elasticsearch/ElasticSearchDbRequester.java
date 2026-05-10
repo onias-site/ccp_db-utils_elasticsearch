@@ -24,7 +24,7 @@ import com.ccp.especifications.db.bulk.CcpBulkOperationResult;
 import com.ccp.especifications.db.bulk.CcpBulkExecutor;
 import com.ccp.especifications.db.utils.CcpDbRequester;
 import com.ccp.especifications.db.utils.entity.CcpEntity;
-import com.ccp.especifications.db.utils.entity.decorators.engine.CcpEntityDetails;
+import com.ccp.especifications.db.utils.entity.decorators.engine.CcpEntityMetaData;
 import com.ccp.especifications.db.utils.entity.decorators.engine.CcpEntityFactory;
 import com.ccp.especifications.db.utils.entity.decorators.interfaces.CcpEntityConfigurator;
 import com.ccp.especifications.db.utils.entity.fields.CcpEntityField;
@@ -215,7 +215,7 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 
 				CcpEntity entity = factory.entityInstance;
 				
-				CcpEntityDetails entityDetails = entity.getEntityDetails();
+				CcpEntityMetaData entityDetails = entity.getEntityMetaData();
 				String scriptToCreateEntity = this.getScriptToCreateEntity(pathToCreateEntityScript, entityDetails.entityName);
 				
 				this.validateEntityFields(entity, pathToCreateEntityScript, className);
@@ -251,7 +251,7 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 			return this;
 		}
 		CcpEntity twinEntity = entity.getTwinEntity();
-		CcpEntityDetails entityDetails = twinEntity.getEntityDetails();
+		CcpEntityMetaData entityDetails = twinEntity.getEntityMetaData();
 		String entityNameTwin = entityDetails.entityName;
 		String urlToEntityTwin = dbUrl + "/" + entityNameTwin;
 		this.recreateEntity(http, scriptToCreateEntity, urlToEntityTwin);
@@ -273,7 +273,7 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 	
 	private CcpDbRequester validateEntityFields(CcpEntity entity, String pathToCreateEntityScript, String className) {
 		
-		CcpEntityDetails entityDetails = entity.getEntityDetails();
+		CcpEntityMetaData entityDetails = entity.getEntityMetaData();
 		String scriptToCreateEntity = this.getScriptToCreateEntity(pathToCreateEntityScript, entityDetails.entityName);
 		CcpJsonRepresentation scriptToCreateEntityAsJson = new CcpJsonRepresentation(scriptToCreateEntity);
 		CcpJsonRepresentation mappings = scriptToCreateEntityAsJson.getInnerJson(JsonFieldNames.mappings);
