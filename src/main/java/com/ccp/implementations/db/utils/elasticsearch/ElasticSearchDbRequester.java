@@ -96,9 +96,9 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 	public <V> V executeHttpRequest(String trace, String url, CcpHttpMethods method,  Integer expectedStatus, String body, CcpJsonRepresentation headers, CcpHttpResponseTransform<V> transformer) {
 		this.loadConnectionProperties();;
 		headers = this.connectionDetails.mergeWithAnotherJson(headers);
-		CcpHttpHandler http = new CcpHttpHandler(expectedStatus);
 		String path = this.connectionDetails.getAsString(JsonFieldNames.DB_URL) + url;
-		V executeHttpRequest = http.executeHttpRequest(trace, path, method, headers, body, transformer);
+		CcpHttpHandler http = new CcpHttpHandler(expectedStatus, path);
+		V executeHttpRequest = http.executeHttpRequest(trace, method, headers, body, transformer);
 		return executeHttpRequest;
 	}
 
@@ -110,8 +110,8 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 				.toString()
 				.replace("[", "").replace("]", "").replace(" ", "") + complemento;
 		CcpJsonRepresentation headers = this.connectionDetails;
-		CcpHttpHandler http = new CcpHttpHandler(expectedStatus);
-		V executeHttpRequest = http.executeHttpRequest(trace, path, method, headers, body, transformer);
+		CcpHttpHandler http = new CcpHttpHandler(expectedStatus, path);
+		V executeHttpRequest = http.executeHttpRequest(trace, method, headers, body, transformer);
 		return executeHttpRequest;
 	}
 
@@ -119,9 +119,9 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 	public <V> V executeHttpRequest(String trace, String url, CcpHttpMethods method, CcpJsonRepresentation flows, CcpJsonRepresentation body, CcpHttpResponseTransform<V> transformer) {
 		this.loadConnectionProperties();
 		CcpJsonRepresentation headers = this.connectionDetails;
-		CcpHttpHandler http = new CcpHttpHandler(flows);
 		String path = headers.getAsString(JsonFieldNames.DB_URL) + url;
-		V executeHttpRequest = http.executeHttpRequest(trace, path, method, headers, body, transformer);
+		CcpHttpHandler http = new CcpHttpHandler(flows, path);
+		V executeHttpRequest = http.executeHttpRequest(trace, method, headers, body, transformer);
 		
 		return executeHttpRequest;
 	}
@@ -130,9 +130,9 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 	public <V> V executeHttpRequest(String trace, String url, CcpHttpMethods method, Integer expectedStatus, CcpJsonRepresentation body, CcpHttpResponseTransform<V> transformer) {
 		this.loadConnectionProperties();
 		CcpJsonRepresentation headers = this.connectionDetails;
-		CcpHttpHandler http = new CcpHttpHandler(expectedStatus);
 		String path = headers.getAsString(JsonFieldNames.DB_URL) + url;
-		V executeHttpRequest = http.executeHttpRequest(trace, path, method, headers, body, transformer);
+		CcpHttpHandler http = new CcpHttpHandler(expectedStatus, path);
+		V executeHttpRequest = http.executeHttpRequest(trace, method, headers, body, transformer);
 		
 		return executeHttpRequest;
 	}
