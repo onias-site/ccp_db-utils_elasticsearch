@@ -34,7 +34,7 @@ import com.ccp.especifications.http.CcpHttpMethods;
 import com.ccp.especifications.http.CcpHttpRequester;
 import com.ccp.especifications.http.CcpHttpResponseTransform;
 import com.ccp.implementations.db.utils.elasticsearch.ElasticSearchDbRequesterSpecialWords.JsonFieldNames;
-
+ 
 enum ElasticSearchDbRequesterSpecialWords implements CcpJsonFieldName{
 	elasticsearch_address("elasticsearch.address"),
 	elasticsearch_secret("elasticsearch.secret"),
