@@ -56,6 +56,12 @@ enum ElasticSearchDbRequesterSpecialWords implements CcpJsonFieldName{
 }
 
 
+/**
+ * Implementação de {@code CcpDbRequester} para o Elasticsearch. Lê as propriedades de conexão
+ * ({@code elasticsearch.address} / {@code elasticsearch.secret}) e executa requisições HTTP contra
+ * o cluster. Também oferece {@code executeDatabaseSetup} para recriar índices e inserir registros
+ * iniciais a partir de scripts de mapeamento.
+ */
 class ElasticSearchDbRequester implements CcpDbRequester {
 
 	private CcpJsonRepresentation connectionDetails = CcpOtherConstants.EMPTY_JSON;
