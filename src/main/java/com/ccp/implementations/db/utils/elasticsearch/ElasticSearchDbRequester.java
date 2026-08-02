@@ -167,7 +167,7 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 			if (e instanceof ClassNotFoundException) {
 				return;
 			}
-			throw new RuntimeException(e);
+			throw new CcpErrorElasticSearchDbSetupUnexpected(e);
 		};
 		
 		List<CcpBulkOperationResult> executeDatabaseSetup = database.executeDatabaseSetup(pathToJavaClasses, hostFolder,
@@ -328,4 +328,10 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 		return "_id";
 	}
 
+	@SuppressWarnings("serial")
+	private static class CcpErrorElasticSearchDbSetupUnexpected extends RuntimeException {
+		private CcpErrorElasticSearchDbSetupUnexpected(Throwable cause) {
+			super(cause);
+		}
+	}
 }
