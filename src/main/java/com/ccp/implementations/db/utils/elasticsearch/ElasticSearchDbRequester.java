@@ -12,9 +12,8 @@ import com.ccp.constants.CcpOtherConstants;
 import com.ccp.decorators.CcpCollectionDecorator;
 import com.ccp.decorators.CcpFileDecorator;
 import com.ccp.decorators.CcpFolderDecorator;
-import com.ccp.decorators.CcpInputStreamDecorator.CcpErrorInputStreamMissing;
+import com.ccp.decorators.CcpErrorInputStreamMissing;
 import com.ccp.decorators.CcpJsonRepresentation;
-import com.ccp.decorators.CcpJsonRepresentation.CcpJsonFieldName;
 import com.ccp.decorators.CcpPropertiesDecorator;
 import com.ccp.decorators.CcpReflectionConstructorDecorator;
 import com.ccp.decorators.CcpStringDecorator;
@@ -34,26 +33,9 @@ import com.ccp.especifications.http.CcpHttpMethods;
 import com.ccp.especifications.http.CcpHttpRequester;
 import com.ccp.especifications.http.CcpHttpResponseTransform;
 import com.ccp.implementations.db.utils.elasticsearch.ElasticSearchDbRequesterSpecialWords.JsonFieldNames;
- 
-enum ElasticSearchDbRequesterSpecialWords implements CcpJsonFieldName{
-	elasticsearch_address("elasticsearch.address"),
-	elasticsearch_secret("elasticsearch.secret"),
-	Content_Type("Content-Type"),
-;
-	static enum JsonFieldNames implements CcpJsonFieldName{
-		Accept, DB_URL, mappings, dynamic, properties, Authorization
-		
-	}
-	private final String value;
-	
-	private ElasticSearchDbRequesterSpecialWords(String value) {
-		this.value = value;
-	}
+import java.util.stream.Stream; 
 
-	public String getValue() {
-		return this.value;
-	}
-}
+
 
 
 /**
@@ -67,7 +49,8 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 	private CcpJsonRepresentation connectionDetails = CcpOtherConstants.EMPTY_JSON;
 	
 	private CcpDbRequester loadConnectionProperties() {
-		boolean alreadyLoaded = false == this.connectionDetails.isEmpty();
+		boolean connectionDetailsEmpty = this.connectionDetails.isEmpty();
+		boolean alreadyLoaded = false == connectionDetailsEmpty;
 		if(alreadyLoaded) {
 			return this;
 		}
@@ -77,22 +60,27 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 			CcpPropertiesDecorator propertiesFrom = ccpStringDecorator.propertiesFrom();
 			systemProperties = propertiesFrom.environmentVariablesOrClassLoaderOrFile();
 		} catch (CcpErrorInputStreamMissing e) {
-			systemProperties = CcpOtherConstants.EMPTY_JSON
-					.put(ElasticSearchDbRequesterSpecialWords.elasticsearch_address, "http://localhost:9200")
+			CcpJsonRepresentation put = CcpOtherConstants.EMPTY_JSON
+					.put(ElasticSearchDbRequesterSpecialWords.elasticsearch_address, "http://localhost:9200");
+					systemProperties = put
 					.put(ElasticSearchDbRequesterSpecialWords.elasticsearch_secret, "")
 					;
 		}
-		
-		CcpJsonRepresentation putIfNotContains = systemProperties
-				.putIfNotContains(ElasticSearchDbRequesterSpecialWords.elasticsearch_address, "http://localhost:9200")
-				.putIfNotContains(ElasticSearchDbRequesterSpecialWords.elasticsearch_secret, "");
+		CcpJsonRepresentation putIfNotContains2 = systemProperties
+				.putIfNotContains(ElasticSearchDbRequesterSpecialWords.elasticsearch_address, "http://localhost:9200");
 
-		CcpJsonRepresentation subMap = putIfNotContains.getJsonPiece(ElasticSearchDbRequesterSpecialWords.elasticsearch_address, ElasticSearchDbRequesterSpecialWords.elasticsearch_secret)
-				.renameField(ElasticSearchDbRequesterSpecialWords.elasticsearch_address, JsonFieldNames.DB_URL).renameField(ElasticSearchDbRequesterSpecialWords.elasticsearch_secret, JsonFieldNames.Authorization)
+				CcpJsonRepresentation putIfNotContains = putIfNotContains2
+				.putIfNotContains(ElasticSearchDbRequesterSpecialWords.elasticsearch_secret, "");
+				CcpJsonRepresentation jsonPiece = putIfNotContains.getJsonPiece(ElasticSearchDbRequesterSpecialWords.elasticsearch_address, ElasticSearchDbRequesterSpecialWords.elasticsearch_secret);
+				CcpJsonRepresentation renameField = jsonPiece
+				.renameField(ElasticSearchDbRequesterSpecialWords.elasticsearch_address, JsonFieldNames.DB_URL);
+
+				CcpJsonRepresentation subMap = renameField.renameField(ElasticSearchDbRequesterSpecialWords.elasticsearch_secret, JsonFieldNames.Authorization)
 				;
-		
-		this.connectionDetails = subMap
-				.put(ElasticSearchDbRequesterSpecialWords.Content_Type, "application/json")
+				CcpJsonRepresentation put2 = subMap
+				.put(ElasticSearchDbRequesterSpecialWords.Content_Type, "application/json");
+
+				this.connectionDetails = put2
 				.put(JsonFieldNames.Accept, "application/json")
 				;
 		return this;
@@ -102,7 +90,8 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 	public <V> V executeHttpRequest(String trace, String url, CcpHttpMethods method,  Integer expectedStatus, String body, CcpJsonRepresentation headers, CcpHttpResponseTransform<V> transformer) {
 		this.loadConnectionProperties();;
 		headers = this.connectionDetails.mergeWithAnotherJson(headers);
-		String path = this.connectionDetails.getAsString(JsonFieldNames.DB_URL) + url;
+		String asString = this.connectionDetails.getAsString(JsonFieldNames.DB_URL);
+		String path = asString + url;
 		CcpHttpHandler http = new CcpHttpHandler(expectedStatus, path);
 		V executeHttpRequest = http.executeHttpRequest(trace, method, headers, body, transformer);
 		return executeHttpRequest;
@@ -111,10 +100,19 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 	
 	public <V> V executeHttpRequest(String trace, String complemento, CcpHttpMethods method, Integer expectedStatus, CcpJsonRepresentation body,  String[] resources, CcpHttpResponseTransform<V> transformer) {
 		this.loadConnectionProperties();
-		String path = this.connectionDetails.getAsString(JsonFieldNames.DB_URL) + "/" +  Arrays.asList(resources).stream()
-				.collect(Collectors.toList())
-				.toString()
-				.replace("[", "").replace("]", "").replace(" ", "") + complemento;
+		String asString2 = this.connectionDetails.getAsString(JsonFieldNames.DB_URL);
+		String asString2Mais = asString2 + "/";
+		Stream<String> stream = Arrays.asList(resources).stream();
+		List<String> collect = stream
+				.collect(Collectors.toList());
+				String toString = collect
+				.toString();
+				String toStringReplace = toString
+				.replace("[", "");
+				String toStringReplaceReplace = toStringReplace.replace("]", "");
+				String toStringReplaceReplaceReplace = toStringReplaceReplace.replace(" ", "");
+				String asString2MaisMais = asString2Mais +  toStringReplaceReplaceReplace;
+				String path = asString2MaisMais + complemento;
 		CcpJsonRepresentation headers = this.connectionDetails;
 		CcpHttpHandler http = new CcpHttpHandler(expectedStatus, path);
 		V executeHttpRequest = http.executeHttpRequest(trace, method, headers, body, transformer);
@@ -125,7 +123,8 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 	public <V> V executeHttpRequest(String trace, String url, CcpHttpMethods method, CcpJsonRepresentation flows, CcpJsonRepresentation body, CcpHttpResponseTransform<V> transformer) {
 		this.loadConnectionProperties();
 		CcpJsonRepresentation headers = this.connectionDetails;
-		String path = headers.getAsString(JsonFieldNames.DB_URL) + url;
+		String asString3 = headers.getAsString(JsonFieldNames.DB_URL);
+		String path = asString3 + url;
 		CcpHttpHandler http = new CcpHttpHandler(flows, path);
 		V executeHttpRequest = http.executeHttpRequest(trace, method, headers, body, transformer);
 		
@@ -136,7 +135,8 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 	public <V> V executeHttpRequest(String trace, String url, CcpHttpMethods method, Integer expectedStatus, CcpJsonRepresentation body, CcpHttpResponseTransform<V> transformer) {
 		this.loadConnectionProperties();
 		CcpJsonRepresentation headers = this.connectionDetails;
-		String path = headers.getAsString(JsonFieldNames.DB_URL) + url;
+		String asString4 = headers.getAsString(JsonFieldNames.DB_URL);
+		String path = asString4 + url;
 		CcpHttpHandler http = new CcpHttpHandler(expectedStatus, path);
 		V executeHttpRequest = http.executeHttpRequest(trace, method, headers, body, transformer);
 		
@@ -152,8 +152,10 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 	public CcpDbRequester createTables(String pathToCreateEntityScript, String pathToJavaClasses, String mappingJnEntitiesErrors, String insertErrors) {
 
 		String hostFolder = "java";
+		CcpStringDecorator ccpStringDecorator2 = new CcpStringDecorator(mappingJnEntitiesErrors);
+		CcpFileDecorator ccpStringDecorator2File = ccpStringDecorator2.file();
 
-		CcpFileDecorator mappingJnEntitiesErrorsFile = new CcpStringDecorator(mappingJnEntitiesErrors).file().reset();
+		CcpFileDecorator mappingJnEntitiesErrorsFile = ccpStringDecorator2File.reset();
 
 		CcpDbRequester database = CcpDependencyInjection.getDependency(CcpDbRequester.class);
 		
@@ -163,19 +165,24 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 		};
 		
 		Consumer<Throwable> whenOccursAnError = e -> {
+			boolean isClassNotFoundException = e instanceof ClassNotFoundException;
 
-			if (e instanceof ClassNotFoundException) {
+			if (isClassNotFoundException) {
 				return;
 			}
-			throw new CcpErrorElasticSearchDbSetupUnexpected(e);
+			CcpErrorElasticSearchDbSetupUnexpected ccpErrorElasticSearchDbSetupUnexpected = new CcpErrorElasticSearchDbSetupUnexpected(e);
+			throw ccpErrorElasticSearchDbSetupUnexpected;
 		};
 		
 		List<CcpBulkOperationResult> executeDatabaseSetup = database.executeDatabaseSetup(pathToJavaClasses, hostFolder,
 				pathToCreateEntityScript, whenIsIncorrectMapping, whenOccursAnError);
+				CcpStringDecorator ccpStringDecorator3 = new CcpStringDecorator(insertErrors);
+				CcpFileDecorator ccpStringDecorator3File = ccpStringDecorator3.file();
 
-		CcpFileDecorator createJnEntitiesFile = new CcpStringDecorator(insertErrors).file().reset();
-		 
-		createJnEntitiesFile.write(executeDatabaseSetup.toString());
+				CcpFileDecorator createJnEntitiesFile = ccpStringDecorator3File.reset();
+				String toString2 = executeDatabaseSetup.toString();
+ 	
+				createJnEntitiesFile.write(toString2);
 		
 		return this;
 	}
@@ -183,24 +190,32 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 	public List<CcpBulkOperationResult> executeDatabaseSetup(String pathToJavaClasses, String hostFolder, String pathToCreateEntityScript,	Consumer<CcpErrorDbUtilsIncorrectEntityFields> whenTheFieldsInTheEntityAreIncorrect,	Consumer<Throwable> whenOccursAnUnhadledError) {
 		this.loadConnectionProperties();
 		CcpHttpRequester http = CcpDependencyInjection.getDependency(CcpHttpRequester.class);
-		CcpFolderDecorator folderJava = new CcpStringDecorator(pathToJavaClasses).folder();
+		CcpStringDecorator ccpStringDecorator4 = new CcpStringDecorator(pathToJavaClasses);
+		CcpFolderDecorator folderJava = ccpStringDecorator4.folder();
 		List<CcpBulkItem> bulkItems = new ArrayList<>();
 		folderJava.readFiles(x -> {
-			String name = new File(x.content).getName();
+			File file = new File(x.content);
+			String name = file.getName();
 			String replace = name.replace(".java", "");
 			String[] split = pathToJavaClasses.split(hostFolder);
-			String sourceFolder = split[split.length - 1];
-			String packageName = sourceFolder.replace("\\", ".").replace("/", ".");
-			if(packageName.startsWith(".")) {
+			int lengthMenos = split.length - 1;
+			String sourceFolder = split[lengthMenos];
+			String sourceFolderReplace = sourceFolder.replace("\\", ".");
+			String packageName = sourceFolderReplace.replace("/", ".");
+			boolean startsWith = packageName.startsWith(".");
+			if(startsWith) {
 				packageName = packageName.substring(1);
 			}
-			String className = packageName + "." + replace;
+			String packageNameMais = packageName + ".";
+			String className = packageNameMais + replace;
 			
 			try {
-				
-				CcpReflectionConstructorDecorator reflection = new CcpStringDecorator(className).reflection();
-				
-				boolean thisClassDoesNotExist = false == reflection.thisClassExists();
+				CcpStringDecorator ccpStringDecorator5 = new CcpStringDecorator(className);
+			
+				CcpReflectionConstructorDecorator reflection = ccpStringDecorator5.reflection();
+				boolean thisClassExists = reflection.thisClassExists();
+
+				boolean thisClassDoesNotExist = false == thisClassExists;
 				
 				if(thisClassDoesNotExist) {
 					return;
@@ -208,8 +223,9 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 
 				Class<?> clazz = reflection.forName();
 				Object newInstance = reflection.newInstance();
-				
-				boolean virtualEntity = false == newInstance instanceof CcpEntityConfigurator;
+				boolean isCcpEntityConfigurator = newInstance instanceof CcpEntityConfigurator;
+
+				boolean virtualEntity = false == isCcpEntityConfigurator;
 				
 				if(virtualEntity) {
 					return;
@@ -227,8 +243,9 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 				this.validateEntityFields(entity, pathToCreateEntityScript, className);
 				
 				String dbUrl = this.connectionDetails.getAsString(JsonFieldNames.DB_URL);
-				
-				String urlToEntity = dbUrl + "/" + entityDetails.entityName;
+				String dbUrlMais = dbUrl + "/";
+
+				String urlToEntity = dbUrlMais + entityDetails.entityName;
 				this.recreateEntity(http, scriptToCreateEntity, urlToEntity);
 				this.recreateEntityTwin(http, factory, scriptToCreateEntity, dbUrl);
 				List<CcpBulkItem> firstRecordsToInsert = configurator.getFirstRecordsToInsert();
@@ -259,7 +276,8 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 		CcpEntity twinEntity = entity.getTwinEntity();
 		CcpEntityMetaData entityDetails = twinEntity.getEntityMetaData();
 		String entityNameTwin = entityDetails.entityName;
-		String urlToEntityTwin = dbUrl + "/" + entityNameTwin;
+		String dbUrlMais2 = dbUrl + "/";
+		String urlToEntityTwin = dbUrlMais2 + entityNameTwin;
 		this.recreateEntity(http, scriptToCreateEntity, urlToEntityTwin);
 		return this;
 	}
@@ -272,8 +290,11 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 	}
 
 	private String getScriptToCreateEntity(String pathToCreateEntityScript, String entityName) {
-		String createEntityFile = pathToCreateEntityScript + "/" + entityName;
-		String scriptToCreateEntity = new CcpStringDecorator(createEntityFile).file().getStringContent();
+		String pathToCreateEntityScriptMais = pathToCreateEntityScript + "/";
+		String createEntityFile = pathToCreateEntityScriptMais + entityName;
+		CcpStringDecorator ccpStringDecorator6 = new CcpStringDecorator(createEntityFile);
+		CcpFileDecorator ccpStringDecorator6File = ccpStringDecorator6.file();
+		String scriptToCreateEntity = ccpStringDecorator6File.getStringContent();
 		return scriptToCreateEntity;
 	}
 	
@@ -284,38 +305,53 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 		CcpJsonRepresentation scriptToCreateEntityAsJson = new CcpJsonRepresentation(scriptToCreateEntity);
 		CcpJsonRepresentation mappings = scriptToCreateEntityAsJson.getInnerJson(JsonFieldNames.mappings);
 		String dynamic = mappings.getAsString(JsonFieldNames.dynamic);
-		
-		boolean isNotStrict = false == "strict".equals(dynamic);
+		boolean equals = "strict".equals(dynamic);
+
+		boolean isNotStrict = false == equals;
 		
 		if(isNotStrict) {
 			String messageError = String.format("The entity '%s' does not have the dynamic properties equals to strict. The script to this entity is %s", dynamic, scriptToCreateEntityAsJson);
-			throw new CcpErrorDbUtilsIncorrectEntityFields(messageError);
+			CcpErrorDbUtilsIncorrectEntityFields ccpErrorDbUtilsIncorrectEntityFields = new CcpErrorDbUtilsIncorrectEntityFields(messageError);
+			throw ccpErrorDbUtilsIncorrectEntityFields;
 		}
 		
 		CcpJsonRepresentation propertiesJson = mappings.getInnerJson(JsonFieldNames.properties);
 		Set<String> scriptFields = propertiesJson.fieldSet();
 		CcpEntityField[] fields = entityDetails.allFields;
-		List<String> classFields = Arrays.asList(fields).stream().map(x -> x.name()).collect(Collectors.toList());
-		Object[] array = scriptFields.toArray(new String[scriptFields.size()]);
-		List<String> isInClassButIsNotInScript = new CcpCollectionDecorator(array).getExclusiveList(classFields);
-		Object[] array2 = classFields.toArray(new String[classFields.size()]);
-		List<String> isInScriptButIsNotInClass = new CcpCollectionDecorator(array2).getExclusiveList(scriptFields);
-		
-		String messageError = String.format("The class '%s'\n that belongs to the entity '%s'\n has an incorrect mapping, "
-				+ "fields that are in script but are not in class %s,\n "
-				+ "fields that are in class but are not in script %s.\n "
-				+ "The script to this entity is %s", className, entityDetails.entityName, isInClassButIsNotInScript, 
+		Stream<CcpEntityField> stream2 = Arrays.asList(fields).stream();
+		var stream2Map = stream2.map(x -> x.name());
+		List<String> classFields = stream2Map.collect(Collectors.toList());
+		int scriptFieldsSize = scriptFields.size();
+		Object[] array = scriptFields.toArray(new String[scriptFieldsSize]);
+		CcpCollectionDecorator ccpCollectionDecorator = new CcpCollectionDecorator(array);
+		List<String> isInClassButIsNotInScript = ccpCollectionDecorator.getExclusiveList(classFields);
+		int classFieldsSize = classFields.size();
+		Object[] array2 = classFields.toArray(new String[classFieldsSize]);
+		CcpCollectionDecorator ccpCollectionDecorator2 = new CcpCollectionDecorator(array2);
+		List<String> isInScriptButIsNotInClass = ccpCollectionDecorator2.getExclusiveList(scriptFields);
+		String valorMais = "The class '%s'\n that belongs to the entity '%s'\n has an incorrect mapping, "
+				+ "fields that are in script but are not in class %s,\n ";
+				String valorMaisMais = valorMais
+				+ "fields that are in class but are not in script %s.\n ";
+				String valorMaisMaisMais = valorMaisMais
+				+ "The script to this entity is %s";
+
+				String messageError = String.format(valorMaisMaisMais, className, entityDetails.entityName, isInClassButIsNotInScript, 
 				isInScriptButIsNotInClass, scriptToCreateEntityAsJson);
-		boolean missingsInClass = false == isInScriptButIsNotInClass.isEmpty();
+				boolean isInScriptButIsNotInClassEmpty = isInScriptButIsNotInClass.isEmpty();
+				boolean missingsInClass = false == isInScriptButIsNotInClassEmpty;
 		
 		if(missingsInClass) {
-			throw new CcpErrorDbUtilsIncorrectEntityFields(messageError);
+			CcpErrorDbUtilsIncorrectEntityFields ccpErrorDbUtilsIncorrectEntityFields2 = new CcpErrorDbUtilsIncorrectEntityFields(messageError);
+			throw ccpErrorDbUtilsIncorrectEntityFields2;
 		}
-		
-		boolean missingsInScript = false == isInClassButIsNotInScript.isEmpty();
+		boolean isInClassButIsNotInScriptEmpty = isInClassButIsNotInScript.isEmpty();
+
+		boolean missingsInScript = false == isInClassButIsNotInScriptEmpty;
 
 		if(missingsInScript) {
-			throw new CcpErrorDbUtilsIncorrectEntityFields(messageError);
+			CcpErrorDbUtilsIncorrectEntityFields ccpErrorDbUtilsIncorrectEntityFields3 = new CcpErrorDbUtilsIncorrectEntityFields(messageError);
+			throw ccpErrorDbUtilsIncorrectEntityFields3;
 		}
 		return this;
 	}

@@ -9,7 +9,8 @@ import com.ccp.especifications.db.utils.CcpDbRequester;
 public class CcpElasticSearchDbRequest implements CcpInstanceProvider<CcpDbRequester> {
 
 	public CcpDbRequester getInstance() {
-		return new ElasticSearchDbRequester();
+		ElasticSearchDbRequester elasticSearchDbRequester = new ElasticSearchDbRequester();
+		return elasticSearchDbRequester;
 	}
 
 }
