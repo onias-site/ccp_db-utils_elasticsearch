@@ -38,6 +38,8 @@ import java.util.stream.Stream;
 
 
 
+import com.ccp.json.fields.validation.CcpJsonCommonsFields;
+
 /**
  * Implementação de {@code CcpDbRequester} para o Elasticsearch. Lê as propriedades de conexão
  * ({@code elasticsearch.address} / {@code elasticsearch.secret}) e executa requisições HTTP contra
@@ -75,13 +77,13 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 				CcpJsonRepresentation renameField = jsonPiece
 				.renameField(ElasticSearchDbRequesterSpecialWords.elasticsearch_address, JsonFieldNames.DB_URL);
 
-				CcpJsonRepresentation subMap = renameField.renameField(ElasticSearchDbRequesterSpecialWords.elasticsearch_secret, JsonFieldNames.Authorization)
+				CcpJsonRepresentation subMap = renameField.renameField(ElasticSearchDbRequesterSpecialWords.elasticsearch_secret, CcpJsonCommonsFields.Authorization)
 				;
 				CcpJsonRepresentation put2 = subMap
 				.put(ElasticSearchDbRequesterSpecialWords.Content_Type, "application/json");
 
 				this.connectionDetails = put2
-				.put(JsonFieldNames.Accept, "application/json")
+				.put(CcpJsonCommonsFields.Accept, "application/json")
 				;
 		return this;
 	}
