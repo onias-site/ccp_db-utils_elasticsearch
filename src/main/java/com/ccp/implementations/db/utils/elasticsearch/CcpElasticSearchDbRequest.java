@@ -4,7 +4,7 @@ import com.ccp.dependency.injection.CcpInstanceProvider;
 import com.ccp.especifications.db.utils.CcpDbRequester;
 
 /**
- * Provedor de DI que expõe {@code ElasticSearchDbRequester} como implementação de {@code CcpDbRequester}.
+ * DI provider that exposes {@code ElasticSearchDbRequester} as the {@code CcpDbRequester} implementation.
  */
 public class CcpElasticSearchDbRequest implements CcpInstanceProvider<CcpDbRequester> {
 
