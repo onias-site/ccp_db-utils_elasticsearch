@@ -48,8 +48,18 @@ import com.ccp.json.fields.validation.CcpJsonCommonsFields;
  */
 class ElasticSearchDbRequester implements CcpDbRequester {
 
+	/**
+	 * The connection details, loaded once: {@code DB_URL}, {@code Authorization}, {@code Content-Type} and {@code Accept}.
+	 * They are also sent, as they are, as the headers of every request (so {@code DB_URL} goes as a header too).
+	 */
 	private CcpJsonRepresentation connectionDetails = CcpOtherConstants.EMPTY_JSON;
 	
+	/**
+	 * Loads, once, the connection details from {@code application_properties} (environment variable, classpath or file):
+	 * {@code elasticsearch.address} (default {@code http://localhost:9200}) becomes {@code DB_URL} and
+	 * {@code elasticsearch.secret} (default empty) becomes {@code Authorization}.
+	 * @return this requester
+	 */
 	private CcpDbRequester loadConnectionProperties() {
 		boolean connectionDetailsEmpty = this.connectionDetails.isEmpty();
 		boolean alreadyLoaded = false == connectionDetailsEmpty;
@@ -89,6 +99,18 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 	}
 
 	
+	/**
+	 * Runs a request with a text body, merging the given headers over the connection headers.
+	 * @param <V> the result type
+	 * @param trace identifier of the request in error messages
+	 * @param url the path after the database URL
+	 * @param method the HTTP method
+	 * @param expectedStatus the only accepted status
+	 * @param body the request body
+	 * @param headers additional headers
+	 * @param transformer turns the response into the result
+	 * @return the result
+	 */
 	public <V> V executeHttpRequest(String trace, String url, CcpHttpMethods method,  Integer expectedStatus, String body, CcpJsonRepresentation headers, CcpHttpResponseTransform<V> transformer) {
 		this.loadConnectionProperties();;
 		headers = this.connectionDetails.mergeWithAnotherJson(headers);
@@ -100,6 +122,18 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 	}
 
 	
+	/**
+	 * Runs a request against the given indexes ({@code <db>/<index1>,<index2><pathSuffix>}).
+	 * @param <V> the result type
+	 * @param trace identifier of the request in error messages
+	 * @param pathSuffix the path after the indexes
+	 * @param method the HTTP method
+	 * @param expectedStatus the only accepted status
+	 * @param body the request body
+	 * @param resources the indexes
+	 * @param transformer turns the response into the result
+	 * @return the result
+	 */
 	public <V> V executeHttpRequest(String trace, String pathSuffix, CcpHttpMethods method, Integer expectedStatus, CcpJsonRepresentation body,  String[] resources, CcpHttpResponseTransform<V> transformer) {
 		this.loadConnectionProperties();
 		String dbUrl = this.connectionDetails.getAsString(JsonFieldNames.DB_URL);
@@ -122,6 +156,17 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 	}
 
 	
+	/**
+	 * Runs a request routing the response by status through the given flows.
+	 * @param <V> the result type
+	 * @param trace identifier of the request in error messages
+	 * @param url the path after the database URL
+	 * @param method the HTTP method
+	 * @param flows the flows by HTTP status
+	 * @param body the request body
+	 * @param transformer turns the response into the result
+	 * @return the result
+	 */
 	public <V> V executeHttpRequest(String trace, String url, CcpHttpMethods method, CcpJsonRepresentation flows, CcpJsonRepresentation body, CcpHttpResponseTransform<V> transformer) {
 		this.loadConnectionProperties();
 		CcpJsonRepresentation headers = this.connectionDetails;
@@ -134,6 +179,17 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 	}
 
 	
+	/**
+	 * Runs a request accepting a single status.
+	 * @param <V> the result type
+	 * @param trace identifier of the request in error messages
+	 * @param url the path after the database URL
+	 * @param method the HTTP method
+	 * @param expectedStatus the only accepted status
+	 * @param body the request body
+	 * @param transformer turns the response into the result
+	 * @return the result
+	 */
 	public <V> V executeHttpRequest(String trace, String url, CcpHttpMethods method, Integer expectedStatus, CcpJsonRepresentation body, CcpHttpResponseTransform<V> transformer) {
 		this.loadConnectionProperties();
 		CcpJsonRepresentation headers = this.connectionDetails;
@@ -146,11 +202,25 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 	}
 
 	
+	/**
+	 * Returns the connection details, loading them on the first call.
+	 * @return the connection details
+	 */
 	public CcpJsonRepresentation getConnectionDetails() {
 		this.loadConnectionProperties();
 		return this.connectionDetails;
 	}
 	
+	/**
+	 * Recreates every entity of the folder (see {@link #executeDatabaseSetup}), writing the mapping errors to
+	 * {@code mappingJnEntitiesErrors} and the results of the seed records to {@code insertErrors}. A
+	 * {@code ClassNotFoundException} is ignored; any other unexpected error aborts the setup.
+	 * @param pathToCreateEntityScript the folder of the index scripts (one file per entity name)
+	 * @param pathToJavaClasses the folder of the entity configurator sources
+	 * @param mappingJnEntitiesErrors the file that receives the mapping errors
+	 * @param insertErrors the file that receives the results of the seed records
+	 * @return this requester
+	 */
 	public CcpDbRequester createTables(String pathToCreateEntityScript, String pathToJavaClasses, String mappingJnEntitiesErrors, String insertErrors) {
 
 		String hostFolder = "java";
@@ -189,6 +259,18 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 		return this;
 	}
 
+	/**
+	 * For each source file of the folder whose class is an entity configurator: checks that its fields match the
+	 * {@code strict} mapping of its script, deletes and recreates its index (and the twin index) with the script, and
+	 * collects its seed records; finally inserts every seed record in one bulk. The class name comes from the folder path
+	 * after {@code hostFolder}.
+	 * @param pathToJavaClasses the folder of the entity configurator sources
+	 * @param hostFolder the folder that precedes the package path (e.g. "java")
+	 * @param pathToCreateEntityScript the folder of the index scripts
+	 * @param whenTheFieldsInTheEntityAreIncorrect receives the mapping errors
+	 * @param whenOccursAnUnhadledError receives any other error
+	 * @return the results of the seed records
+	 */
 	public List<CcpBulkOperationResult> executeDatabaseSetup(String pathToJavaClasses, String hostFolder, String pathToCreateEntityScript,	Consumer<CcpErrorDbUtilsIncorrectEntityFields> whenTheFieldsInTheEntityAreIncorrect,	Consumer<Throwable> whenOccursAnUnhadledError) {
 		this.loadConnectionProperties();
 		CcpHttpRequester http = CcpDependencyInjection.getDependency(CcpHttpRequester.class);
@@ -269,6 +351,14 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 	}
 
 
+	/**
+	 * Recreates the twin index of the entity, when it has one, with the same script.
+	 * @param http the HTTP requester
+	 * @param factory the entity factory
+	 * @param scriptToCreateEntity the index script
+	 * @param dbUrl the database URL
+	 * @return this requester
+	 */
 	private CcpDbRequester recreateEntityTwin(CcpHttpRequester http, CcpEntityFactory factory, String scriptToCreateEntity, String dbUrl) {
 		
 		CcpEntity entity = factory.entityInstance;
@@ -288,12 +378,25 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 	}
 
 
+	/**
+	 * Deletes the index (200 or 404 accepted) and creates it again with the script.
+	 * @param http the HTTP requester
+	 * @param scriptToCreateEntity the index script
+	 * @param urlToEntity the URL of the index
+	 * @return this requester
+	 */
 	private CcpDbRequester recreateEntity(CcpHttpRequester http, String scriptToCreateEntity, String urlToEntity) {
 		http.executeHttpRequest(urlToEntity, CcpHttpMethods.DELETE, this.connectionDetails, scriptToCreateEntity, 200, 404);
 		http.executeHttpRequest(urlToEntity, CcpHttpMethods.PUT, this.connectionDetails, scriptToCreateEntity, 200);
 		return this;
 	}
 
+	/**
+	 * Reads the index script, the file named after the entity in the scripts folder.
+	 * @param pathToCreateEntityScript the scripts folder
+	 * @param entityName the entity name
+	 * @return the script
+	 */
 	private String getScriptToCreateEntity(String pathToCreateEntityScript, String entityName) {
 		String scriptFolderWithSlash = pathToCreateEntityScript + "/";
 		String createEntityFile = scriptFolderWithSlash + entityName;
@@ -303,6 +406,14 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 		return scriptToCreateEntity;
 	}
 	
+	/**
+	 * Checks that the mapping of the script is {@code dynamic: strict} and declares exactly the fields of the entity.
+	 * @param entity the entity
+	 * @param pathToCreateEntityScript the scripts folder
+	 * @param className the configurator class name, for the message
+	 * @return this requester
+	 * @throws CcpErrorDbUtilsIncorrectEntityFields when the mapping is not strict or the fields differ
+	 */
 	private CcpDbRequester validateEntityFields(CcpEntity entity, String pathToCreateEntityScript, String className) {
 		
 		CcpEntityMetaData entityDetails = entity.getEntityMetaData();
@@ -361,16 +472,29 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 		return this;
 	}
 
+	/**
+	 * The index field of Elasticsearch documents.
+	 * @return {@code _index}
+	 */
 	public String getFieldNameToEntity() {
 		return "_index";
 	}
 
+	/**
+	 * The id field of Elasticsearch documents.
+	 * @return {@code _id}
+	 */
 	public String getFieldNameToId() {
 		return "_id";
 	}
 
+	/** Raised when the database setup meets an unexpected error. */
 	@SuppressWarnings("serial")
 	private static class CcpErrorElasticSearchDbSetupUnexpected extends RuntimeException {
+		/**
+		 * Wraps the cause.
+		 * @param cause the original failure
+		 */
 		private CcpErrorElasticSearchDbSetupUnexpected(Throwable cause) {
 			super(cause);
 		}
