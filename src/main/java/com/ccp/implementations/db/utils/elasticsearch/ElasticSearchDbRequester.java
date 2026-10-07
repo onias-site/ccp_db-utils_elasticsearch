@@ -48,11 +48,13 @@ import com.ccp.json.fields.validation.CcpJsonCommonsFields;
  */
 class ElasticSearchDbRequester implements CcpDbRequester {
 
-	/**
-	 * The connection details, loaded once: {@code DB_URL}, {@code Authorization}, {@code Content-Type} and {@code Accept}.
-	 * They are also sent, as they are, as the headers of every request (so {@code DB_URL} goes as a header too).
-	 */
+	/** The connection details, loaded once: {@code DB_URL}, {@code Authorization}, {@code Content-Type} and {@code Accept}. */
 	private CcpJsonRepresentation connectionDetails = CcpOtherConstants.EMPTY_JSON;
+	/**
+	 * The headers of every request: the connection details without {@code DB_URL}. Until 2026-10-07 the connection
+	 * details were sent as they are, so the address of the database went as an HTTP header in every request.
+	 */
+	private CcpJsonRepresentation headers = CcpOtherConstants.EMPTY_JSON;
 	
 	/**
 	 * Loads, once, the connection details from {@code application_properties} (environment variable, classpath or file):
@@ -95,6 +97,7 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 				this.connectionDetails = propertiesWithContentType
 				.put(CcpJsonCommonsFields.Accept, "application/json")
 				;
+		this.headers = this.connectionDetails.removeFields(JsonFieldNames.DB_URL);
 		return this;
 	}
 
@@ -113,7 +116,7 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 	 */
 	public <V> V executeHttpRequest(String trace, String url, CcpHttpMethods method,  Integer expectedStatus, String body, CcpJsonRepresentation headers, CcpHttpResponseTransform<V> transformer) {
 		this.loadConnectionProperties();;
-		headers = this.connectionDetails.mergeWithAnotherJson(headers);
+		headers = this.headers.mergeWithAnotherJson(headers);
 		String dbUrl = this.connectionDetails.getAsString(JsonFieldNames.DB_URL);
 		String path = dbUrl + url;
 		CcpHttpHandler http = new CcpHttpHandler(expectedStatus, path);
@@ -149,7 +152,7 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 				String commaSeparatedResources = resourcesWithoutBrackets.replace(" ", "");
 				String dbUrlWithResources = dbUrlWithSlash +  commaSeparatedResources;
 				String path = dbUrlWithResources + pathSuffix;
-		CcpJsonRepresentation headers = this.connectionDetails;
+		CcpJsonRepresentation headers = this.headers;
 		CcpHttpHandler http = new CcpHttpHandler(expectedStatus, path);
 		V response = http.executeHttpRequest(trace, method, headers, body, transformer);
 		return response;
@@ -169,8 +172,8 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 	 */
 	public <V> V executeHttpRequest(String trace, String url, CcpHttpMethods method, CcpJsonRepresentation flows, CcpJsonRepresentation body, CcpHttpResponseTransform<V> transformer) {
 		this.loadConnectionProperties();
-		CcpJsonRepresentation headers = this.connectionDetails;
-		String dbUrl = headers.getAsString(JsonFieldNames.DB_URL);
+		CcpJsonRepresentation headers = this.headers;
+		String dbUrl = this.connectionDetails.getAsString(JsonFieldNames.DB_URL);
 		String path = dbUrl + url;
 		CcpHttpHandler http = new CcpHttpHandler(flows, path);
 		V response = http.executeHttpRequest(trace, method, headers, body, transformer);
@@ -192,8 +195,8 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 	 */
 	public <V> V executeHttpRequest(String trace, String url, CcpHttpMethods method, Integer expectedStatus, CcpJsonRepresentation body, CcpHttpResponseTransform<V> transformer) {
 		this.loadConnectionProperties();
-		CcpJsonRepresentation headers = this.connectionDetails;
-		String dbUrl = headers.getAsString(JsonFieldNames.DB_URL);
+		CcpJsonRepresentation headers = this.headers;
+		String dbUrl = this.connectionDetails.getAsString(JsonFieldNames.DB_URL);
 		String path = dbUrl + url;
 		CcpHttpHandler http = new CcpHttpHandler(expectedStatus, path);
 		V response = http.executeHttpRequest(trace, method, headers, body, transformer);
@@ -386,8 +389,8 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 	 * @return this requester
 	 */
 	private CcpDbRequester recreateEntity(CcpHttpRequester http, String scriptToCreateEntity, String urlToEntity) {
-		http.executeHttpRequest(urlToEntity, CcpHttpMethods.DELETE, this.connectionDetails, scriptToCreateEntity, 200, 404);
-		http.executeHttpRequest(urlToEntity, CcpHttpMethods.PUT, this.connectionDetails, scriptToCreateEntity, 200);
+		http.executeHttpRequest(urlToEntity, CcpHttpMethods.DELETE, this.headers, scriptToCreateEntity, 200, 404);
+		http.executeHttpRequest(urlToEntity, CcpHttpMethods.PUT, this.headers, scriptToCreateEntity, 200);
 		return this;
 	}
 
@@ -426,7 +429,8 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 		boolean isNotStrict = false == isStrict;
 		
 		if(isNotStrict) {
-			String messageError = String.format("The entity '%s' does not have the dynamic properties equals to strict. The script to this entity is %s", dynamic, scriptToCreateEntityAsJson);
+			// until 2026-10-07 the first placeholder got the value of dynamic, so the message did not name the entity
+			String messageError = String.format("The entity '%s' has the dynamic property '%s' instead of 'strict'. The script to this entity is %s", entityDetails.entityName, dynamic, scriptToCreateEntityAsJson);
 			CcpErrorDbUtilsIncorrectEntityFields ccpErrorDbUtilsIncorrectEntityFields = new CcpErrorDbUtilsIncorrectEntityFields(messageError);
 			throw ccpErrorDbUtilsIncorrectEntityFields;
 		}
