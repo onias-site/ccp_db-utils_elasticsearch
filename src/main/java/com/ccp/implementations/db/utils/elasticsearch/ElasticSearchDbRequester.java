@@ -216,15 +216,15 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 	
 	/**
 	 * Recreates every entity of the folder (see {@link #executeDatabaseSetup}), writing the mapping errors to
-	 * {@code mappingJnEntitiesErrors} and the results of the seed records to {@code insertErrors}. A
+	 * {@code mappingJnEntitiesErrors} and the results of the seed records to {@code insertResults}. A
 	 * {@code ClassNotFoundException} is ignored; any other unexpected error aborts the setup.
 	 * @param pathToCreateEntityScript the folder of the index scripts (one file per entity name)
 	 * @param pathToJavaClasses the folder of the entity configurator sources
 	 * @param mappingJnEntitiesErrors the file that receives the mapping errors
-	 * @param insertErrors the file that receives the results of the seed records
+	 * @param insertResults the file that receives the results of the seed records
 	 * @return this requester
 	 */
-	public CcpDbRequester createTables(String pathToCreateEntityScript, String pathToJavaClasses, String mappingJnEntitiesErrors, String insertErrors) {
+	public CcpDbRequester createTables(String pathToCreateEntityScript, String pathToJavaClasses, String mappingJnEntitiesErrors, String insertResults) {
 
 		String hostFolder = "java";
 		CcpStringDecorator mappingErrorsPath = new CcpStringDecorator(mappingJnEntitiesErrors);
@@ -251,10 +251,10 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 		
 		List<CcpBulkOperationResult> setupResults = database.executeDatabaseSetup(pathToJavaClasses, hostFolder,
 				pathToCreateEntityScript, whenIsIncorrectMapping, whenOccursAnError);
-				CcpStringDecorator insertErrorsPath = new CcpStringDecorator(insertErrors);
-				CcpFileDecorator insertErrorsFileDecorator = insertErrorsPath.file();
+				CcpStringDecorator insertResultsPath = new CcpStringDecorator(insertResults);
+				CcpFileDecorator insertResultsFileDecorator = insertResultsPath.file();
 
-				CcpFileDecorator createJnEntitiesFile = insertErrorsFileDecorator.reset();
+				CcpFileDecorator createJnEntitiesFile = insertResultsFileDecorator.reset();
 				String setupResultsAsText = setupResults.toString();
  	
 				createJnEntitiesFile.write(setupResultsAsText);
