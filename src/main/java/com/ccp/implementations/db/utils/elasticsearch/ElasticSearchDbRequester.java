@@ -310,7 +310,7 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 
 				Class<?> clazz = reflection.forName();
 				// checked on the class, before instantiating: the entities folder also holds auxiliary types (such
-				// as VisMoneyTypes, an enum) that have no constructor without arguments and are not entities
+				// as enums) that have no constructor without arguments and are not entities
 				boolean isCcpEntityConfigurator = CcpEntityConfigurator.class.isAssignableFrom(clazz);
 
 				boolean virtualEntity = false == isCcpEntityConfigurator;
