@@ -1,6 +1,5 @@
 package com.ccp.implementations.db.utils.elasticsearch;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -15,7 +14,6 @@ import com.ccp.decorators.CcpFolderDecorator;
 import com.ccp.decorators.CcpErrorInputStreamMissing;
 import com.ccp.decorators.CcpJsonRepresentation;
 import com.ccp.decorators.CcpPropertiesDecorator;
-import com.ccp.decorators.CcpReflectionConstructorDecorator;
 import com.ccp.decorators.CcpStringDecorator;
 import com.ccp.dependency.injection.CcpDependencyInjection;
 import com.ccp.especifications.db.bulk.CcpBulkExecutor;
@@ -25,7 +23,6 @@ import com.ccp.especifications.db.utils.CcpDbRequester;
 import com.ccp.especifications.db.utils.entity.CcpEntity;
 import com.ccp.especifications.db.utils.entity.decorators.engine.CcpEntityFactory;
 import com.ccp.especifications.db.utils.entity.decorators.engine.CcpEntityMetaData;
-import com.ccp.especifications.db.utils.entity.decorators.interfaces.CcpEntityConfigurator;
 import com.ccp.especifications.db.utils.entity.fields.CcpEntityField;
 import com.ccp.especifications.db.utils.entity.fields.CcpErrorDbUtilsIncorrectEntityFields;
 import com.ccp.especifications.http.CcpHttpHandler;
@@ -234,20 +231,9 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 
 		CcpDbRequester database = CcpDependencyInjection.getDependency(CcpDbRequester.class);
 		
-		Consumer<CcpErrorDbUtilsIncorrectEntityFields> whenIsIncorrectMapping = e -> {
-			String message = e.getMessage();
-			mappingJnEntitiesErrorsFile.append(message);
-		};
-		
-		Consumer<Throwable> whenOccursAnError = e -> {
-			boolean isClassNotFoundException = e instanceof ClassNotFoundException;
+		Consumer<CcpErrorDbUtilsIncorrectEntityFields> whenIsIncorrectMapping = new ElasticSearchMappingErrorWriter(mappingJnEntitiesErrorsFile);
 
-			if (isClassNotFoundException) {
-				return;
-			}
-			CcpErrorElasticSearchDbSetupUnexpected ccpErrorElasticSearchDbSetupUnexpected = new CcpErrorElasticSearchDbSetupUnexpected(e);
-			throw ccpErrorElasticSearchDbSetupUnexpected;
-		};
+		Consumer<Throwable> whenOccursAnError = ElasticSearchSetupErrorHandler.INSTANCE;
 		
 		List<CcpBulkOperationResult> setupResults = database.executeDatabaseSetup(pathToJavaClasses, hostFolder,
 				pathToCreateEntityScript, whenIsIncorrectMapping, whenOccursAnError);
@@ -280,73 +266,8 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 		CcpStringDecorator javaClassesPath = new CcpStringDecorator(pathToJavaClasses);
 		CcpFolderDecorator folderJava = javaClassesPath.folder();
 		List<CcpBulkItem> bulkItems = new ArrayList<>();
-		folderJava.readFiles(javaFile -> {
-			File file = new File(javaFile.content);
-			String name = file.getName();
-			String simpleClassName = name.replace(".java", "");
-			String[] split = pathToJavaClasses.split(hostFolder);
-			int lastIndex = split.length - 1;
-			String sourceFolder = split[lastIndex];
-			String sourceFolderReplace = sourceFolder.replace("\\", ".");
-			String packageName = sourceFolderReplace.replace("/", ".");
-			boolean startsWithDot = packageName.startsWith(".");
-			if(startsWithDot) {
-				packageName = packageName.substring(1);
-			}
-			String packagePrefix = packageName + ".";
-			String className = packagePrefix + simpleClassName;
-			
-			try {
-				CcpStringDecorator classNameDecorator = new CcpStringDecorator(className);
-			
-				CcpReflectionConstructorDecorator reflection = classNameDecorator.reflection();
-				boolean thisClassExists = reflection.thisClassExists();
-
-				boolean thisClassDoesNotExist = false == thisClassExists;
-				
-				if(thisClassDoesNotExist) {
-					return;
-				}
-
-				Class<?> clazz = reflection.forName();
-				// checked on the class, before instantiating: the entities folder also holds auxiliary types (such
-				// as enums) that have no constructor without arguments and are not entities
-				boolean isCcpEntityConfigurator = CcpEntityConfigurator.class.isAssignableFrom(clazz);
-
-				boolean virtualEntity = false == isCcpEntityConfigurator;
-
-				if(virtualEntity) {
-					return;
-				}
-
-				Object newInstance = reflection.newInstance();
-
-				CcpEntityConfigurator configurator = (CcpEntityConfigurator) newInstance;
-
-				CcpEntityFactory factory = new CcpEntityFactory(clazz);
-
-				CcpEntity entity = factory.entityInstance;
-				
-				CcpEntityMetaData entityDetails = entity.getEntityMetaData();
-				String scriptToCreateEntity = this.getScriptToCreateEntity(pathToCreateEntityScript, entityDetails.entityName);
-				
-				this.validateEntityFields(entity, pathToCreateEntityScript, className);
-				
-				String dbUrl = this.connectionDetails.getAsString(JsonFieldNames.DB_URL);
-				String dbUrlWithSlash = dbUrl + "/";
-
-				String urlToEntity = dbUrlWithSlash + entityDetails.entityName;
-				this.recreateEntity(http, scriptToCreateEntity, urlToEntity);
-				this.recreateEntityTwin(http, factory, scriptToCreateEntity, dbUrl);
-				List<CcpBulkItem> firstRecordsToInsert = configurator.getFirstRecordsToInsert();
-				bulkItems.addAll(firstRecordsToInsert);
-			}catch(CcpErrorDbUtilsIncorrectEntityFields e) {
-				whenTheFieldsInTheEntityAreIncorrect.accept(e);
-			}catch (Throwable e) {
-				whenOccursAnUnhadledError.accept(e);
-			}
-
-		});	
+		ElasticSearchEntitySetupFromJavaFile entitySetup = new ElasticSearchEntitySetupFromJavaFile(this, http, pathToJavaClasses, hostFolder, pathToCreateEntityScript, bulkItems, whenTheFieldsInTheEntityAreIncorrect, whenOccursAnUnhadledError);
+		folderJava.readFiles(entitySetup);
 		CcpBulkExecutor bulk = CcpDependencyInjection.getDependency(CcpBulkExecutor.class);
 		bulk = bulk.addRecords(bulkItems);
 		List<CcpBulkOperationResult> bulkOperationResult = bulk.getBulkOperationResult();
@@ -362,7 +283,7 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 	 * @param dbUrl the database URL
 	 * @return this requester
 	 */
-	private CcpDbRequester recreateEntityTwin(CcpHttpRequester http, CcpEntityFactory factory, String scriptToCreateEntity, String dbUrl) {
+	CcpDbRequester recreateEntityTwin(CcpHttpRequester http, CcpEntityFactory factory, String scriptToCreateEntity, String dbUrl) {
 		
 		CcpEntity entity = factory.entityInstance;
 		
@@ -388,7 +309,7 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 	 * @param urlToEntity the URL of the index
 	 * @return this requester
 	 */
-	private CcpDbRequester recreateEntity(CcpHttpRequester http, String scriptToCreateEntity, String urlToEntity) {
+	CcpDbRequester recreateEntity(CcpHttpRequester http, String scriptToCreateEntity, String urlToEntity) {
 		http.executeHttpRequest(urlToEntity, CcpHttpMethods.DELETE, this.headers, scriptToCreateEntity, 200, 404);
 		http.executeHttpRequest(urlToEntity, CcpHttpMethods.PUT, this.headers, scriptToCreateEntity, 200);
 		return this;
@@ -400,7 +321,7 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 	 * @param entityName the entity name
 	 * @return the script
 	 */
-	private String getScriptToCreateEntity(String pathToCreateEntityScript, String entityName) {
+	String getScriptToCreateEntity(String pathToCreateEntityScript, String entityName) {
 		String scriptFolderWithSlash = pathToCreateEntityScript + "/";
 		String createEntityFile = scriptFolderWithSlash + entityName;
 		CcpStringDecorator createEntityFilePath = new CcpStringDecorator(createEntityFile);
@@ -417,7 +338,7 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 	 * @return this requester
 	 * @throws CcpErrorDbUtilsIncorrectEntityFields when the mapping is not strict or the fields differ
 	 */
-	private CcpDbRequester validateEntityFields(CcpEntity entity, String pathToCreateEntityScript, String className) {
+	CcpDbRequester validateEntityFields(CcpEntity entity, String pathToCreateEntityScript, String className) {
 		
 		CcpEntityMetaData entityDetails = entity.getEntityMetaData();
 		String scriptToCreateEntity = this.getScriptToCreateEntity(pathToCreateEntityScript, entityDetails.entityName);
@@ -490,17 +411,5 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 	 */
 	public String getFieldNameToId() {
 		return "_id";
-	}
-
-	/** Raised when the database setup meets an unexpected error. */
-	@SuppressWarnings("serial")
-	private static class CcpErrorElasticSearchDbSetupUnexpected extends RuntimeException {
-		/**
-		 * Wraps the cause.
-		 * @param cause the original failure
-		 */
-		private CcpErrorElasticSearchDbSetupUnexpected(Throwable cause) {
-			super(cause);
-		}
 	}
 }
