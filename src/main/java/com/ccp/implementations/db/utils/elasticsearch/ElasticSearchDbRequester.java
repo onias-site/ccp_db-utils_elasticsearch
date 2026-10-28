@@ -15,6 +15,7 @@ import com.ccp.decorators.CcpErrorInputStreamMissing;
 import com.ccp.decorators.CcpJsonRepresentation;
 import com.ccp.decorators.CcpPropertiesDecorator;
 import com.ccp.decorators.CcpStringDecorator;
+import com.ccp.decorators.CcpTimeDecorator;
 import com.ccp.dependency.injection.CcpDependencyInjection;
 import com.ccp.especifications.db.bulk.CcpBulkExecutor;
 import com.ccp.especifications.db.bulk.CcpBulkItem;
@@ -29,6 +30,7 @@ import com.ccp.especifications.http.CcpHttpHandler;
 import com.ccp.especifications.http.CcpHttpMethods;
 import com.ccp.especifications.http.CcpHttpRequester;
 import com.ccp.especifications.http.CcpHttpResponseTransform;
+import com.ccp.especifications.http.CcpHttpResponseType;
 import com.ccp.implementations.db.utils.elasticsearch.ElasticSearchDbRequesterSpecialWords.JsonFieldNames;
 import java.util.stream.Stream; 
 
@@ -52,6 +54,9 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 	 * details were sent as they are, so the address of the database went as an HTTP header in every request.
 	 */
 	private CcpJsonRepresentation headers = CcpOtherConstants.EMPTY_JSON;
+
+	/** The kind of repository of the backups, from {@code elasticsearch.snapshot.repository} ({@code fs} when absent). */
+	private ElasticSearchSnapshotRepositoryType snapshotRepositoryType = ElasticSearchSnapshotRepositoryType.fs;
 	
 	/**
 	 * Loads, once, the connection details from {@code application_properties} (environment variable, classpath or file):
@@ -77,6 +82,9 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 					.put(ElasticSearchDbRequesterSpecialWords.elasticsearch_secret, "")
 					;
 		}
+		String defaultRepositoryType = ElasticSearchSnapshotRepositoryType.fs.name();
+		String repositoryType = systemProperties.getOrDefault(ElasticSearchDbRequesterSpecialWords.elasticsearch_snapshot_repository, () -> defaultRepositoryType);
+		this.snapshotRepositoryType = ElasticSearchSnapshotRepositoryType.valueOf(repositoryType);
 		CcpJsonRepresentation propertiesWithAddress = systemProperties
 				.putIfNotContains(ElasticSearchDbRequesterSpecialWords.elasticsearch_address, "http://localhost:9200");
 
@@ -395,6 +403,37 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 			throw fieldsMissingInScriptError;
 		}
 		return this;
+	}
+
+	/**
+	 * Backs up the indexes of the given names in a snapshot of the repository named after the bucket, registered first
+	 * (the register is idempotent) with the kind of {@code elasticsearch.snapshot.repository}: Elasticsearch writes the
+	 * files straight to the bucket. The snapshot is named {@code backup-<yyyyMMdd-HHmmss-SSS>}, keeps no state of the cluster,
+	 * skips the names that match no index and is waited for.
+	 * @param bucketName the bucket
+	 * @param entityNamePatterns the names of the indexes, {@code *} standing for any text
+	 * @return the {@code snapshot} of the response: its name, its indexes, its state and its shards
+	 */
+	public CcpJsonRepresentation backup(String bucketName, List<String> entityNamePatterns) {
+		this.loadConnectionProperties();
+		String snapshotPath = ElasticSearchDbRequesterSpecialWords.SNAPSHOT_PATH.getValue();
+		String repositoryPath = snapshotPath + bucketName;
+		CcpJsonRepresentation repository = this.snapshotRepositoryType.getRepository(bucketName);
+		this.executeHttpRequest("registerSnapshotRepository", repositoryPath, CcpHttpMethods.PUT, 200, repository, CcpHttpResponseType.singleRecord);
+
+		String snapshotNameFormat = ElasticSearchDbRequesterSpecialWords.SNAPSHOT_NAME_FORMAT.getValue();
+		CcpTimeDecorator now = new CcpTimeDecorator();
+		String snapshotName = now.getFormattedDateTime(snapshotNameFormat);
+		String waitForCompletion = ElasticSearchDbRequesterSpecialWords.WAIT_FOR_COMPLETION.getValue();
+		String snapshotOfTheRepository = repositoryPath + "/" + snapshotName;
+		String snapshotUrl = snapshotOfTheRepository + waitForCompletion;
+		String indices = String.join(",", entityNamePatterns);
+		CcpJsonRepresentation bodyWithIndices = CcpOtherConstants.EMPTY_JSON.put(JsonFieldNames.indices, indices);
+		CcpJsonRepresentation bodyWithIgnoreUnavailable = bodyWithIndices.put(JsonFieldNames.ignore_unavailable, true);
+		CcpJsonRepresentation body = bodyWithIgnoreUnavailable.put(JsonFieldNames.include_global_state, false);
+		CcpJsonRepresentation response = this.executeHttpRequest("createSnapshot", snapshotUrl, CcpHttpMethods.PUT, 200, body, CcpHttpResponseType.singleRecord);
+		CcpJsonRepresentation snapshot = response.getInnerJson(JsonFieldNames.snapshot);
+		return snapshot;
 	}
 
 	/**
