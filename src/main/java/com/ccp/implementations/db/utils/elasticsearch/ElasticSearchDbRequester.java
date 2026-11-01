@@ -324,6 +324,18 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 	}
 
 	/**
+	 * Creates the index with the script, leaving it as it is when it already exists (400 accepted).
+	 * @param http the HTTP requester
+	 * @param scriptToCreateEntity the index script
+	 * @param urlToEntity the URL of the index
+	 * @return this requester
+	 */
+	CcpDbRequester createEntityIfItDoesNotExist(CcpHttpRequester http, String scriptToCreateEntity, String urlToEntity) {
+		http.executeHttpRequest(urlToEntity, CcpHttpMethods.PUT, this.headers, scriptToCreateEntity, 200, 400);
+		return this;
+	}
+
+	/**
 	 * Reads the index script, the file named after the entity in the scripts folder.
 	 * @param pathToCreateEntityScript the scripts folder
 	 * @param entityName the entity name

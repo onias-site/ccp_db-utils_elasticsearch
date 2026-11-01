@@ -132,6 +132,13 @@ class ElasticSearchEntitySetupFromJavaFile implements Consumer<CcpFileDecorator>
 			String dbUrlWithSlash = dbUrl + "/";
 
 			String urlToEntity = dbUrlWithSlash + entityDetails.entityName;
+			boolean keepsItsRecords = configurator.keepsItsRecordsOnTheSetup();
+
+			if(keepsItsRecords) {
+				this.requester.createEntityIfItDoesNotExist(this.http, scriptToCreateEntity, urlToEntity);
+				return;
+			}
+
 			this.requester.recreateEntity(this.http, scriptToCreateEntity, urlToEntity);
 			this.requester.recreateEntityTwin(this.http, factory, scriptToCreateEntity, dbUrl);
 			List<CcpBulkItem> firstRecordsToInsert = configurator.getFirstRecordsToInsert();
