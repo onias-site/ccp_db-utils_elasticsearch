@@ -22,6 +22,12 @@ enum ElasticSearchDbRequesterSpecialWords implements CcpJsonFieldName{
 	WAIT_FOR_COMPLETION("?wait_for_completion=true"),
 	/** The pattern of the name of a backup: {@code backup-} plus the date and time, to the millisecond, it started. */
 	SNAPSHOT_NAME_FORMAT("'backup-'yyyyMMdd-HHmmss-SSS"),
+	/** The start of the path of an index. */
+	INDEX_PATH_START("/"),
+	/** What makes an index show what was just written. */
+	REFRESH_PATH("/_refresh"),
+	/** The name of the refresh in the logs of the database. */
+	REFRESH_TRACE("refreshEntity"),
 ;
 	/** Fields of the connection details and of the index scripts. */
 	static enum JsonFieldNames implements CcpJsonFieldName{

@@ -449,6 +449,20 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 	}
 
 	/**
+	 * Refreshes the index of the entity. The request goes without a body: Elasticsearch 9 answers 400
+	 * to a refresh that has one, even an empty JSON.
+	 * @param entityName the name of the index
+	 */
+	public void refresh(String entityName) {
+		String indexPathStart = ElasticSearchDbRequesterSpecialWords.INDEX_PATH_START.getValue();
+		String refreshPath = ElasticSearchDbRequesterSpecialWords.REFRESH_PATH.getValue();
+		String refreshUrl = indexPathStart + entityName + refreshPath;
+		String refreshTrace = ElasticSearchDbRequesterSpecialWords.REFRESH_TRACE.getValue();
+		String noBody = CcpOtherConstants.EMPTY_STRING.getValue();
+		this.executeHttpRequest(refreshTrace, refreshUrl, CcpHttpMethods.POST, 200, noBody, CcpOtherConstants.EMPTY_JSON, CcpHttpResponseType.singleRecord);
+	}
+
+	/**
 	 * The index field of Elasticsearch documents.
 	 * @return {@code _index}
 	 */
