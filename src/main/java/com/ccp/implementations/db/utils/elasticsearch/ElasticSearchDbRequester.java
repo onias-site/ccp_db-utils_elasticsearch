@@ -4,7 +4,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.function.Consumer;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import com.ccp.constants.CcpOtherConstants;
@@ -20,7 +23,9 @@ import com.ccp.dependency.injection.CcpDependencyInjection;
 import com.ccp.especifications.db.bulk.CcpBulkExecutor;
 import com.ccp.especifications.db.bulk.CcpBulkItem;
 import com.ccp.especifications.db.bulk.CcpBulkOperationResult;
+import com.ccp.especifications.db.utils.CcpDbCallsOfTheThread;
 import com.ccp.especifications.db.utils.CcpDbRequester;
+import com.ccp.especifications.http.CcpHttpResponse;
 import com.ccp.especifications.db.utils.entity.CcpEntity;
 import com.ccp.especifications.db.utils.entity.decorators.engine.CcpEntityFactory;
 import com.ccp.especifications.db.utils.entity.decorators.engine.CcpEntityMetaData;
@@ -54,6 +59,9 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 	 * details were sent as they are, so the address of the database went as an HTTP header in every request.
 	 */
 	private CcpJsonRepresentation headers = CcpOtherConstants.EMPTY_JSON;
+
+	/** Finds the indexes named in a body ({@code "_index"} of each item of an {@code _mget} or a {@code _bulk}). */
+	private static final Pattern INDEX_IN_THE_BODY = Pattern.compile(ElasticSearchDbRequesterSpecialWords.INDEX_IN_THE_BODY.getValue());
 
 	/** The kind of repository of the backups, from {@code elasticsearch.snapshot.repository} ({@code fs} when absent). */
 	private ElasticSearchSnapshotRepositoryType snapshotRepositoryType = ElasticSearchSnapshotRepositoryType.fs;
@@ -121,12 +129,159 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 	 */
 	public <V> V executeHttpRequest(String trace, String url, CcpHttpMethods method,  Integer expectedStatus, String body, CcpJsonRepresentation headers, CcpHttpResponseTransform<V> transformer) {
 		this.loadConnectionProperties();;
-		headers = this.headers.mergeWithAnotherJson(headers);
+		CcpJsonRepresentation mergedHeaders = this.headers.mergeWithAnotherJson(headers);
 		String dbUrl = this.connectionDetails.getAsString(JsonFieldNames.DB_URL);
 		String path = dbUrl + url;
 		CcpHttpHandler http = new CcpHttpHandler(expectedStatus, path);
-		V response = http.executeHttpRequest(trace, method, headers, body, transformer);
+		V response = this.executeMeasured(trace, url, path, method, http, mergedHeaders, body, transformer);
 		return response;
+	}
+
+	/**
+	 * Runs the request and records it in the unit of the current thread ({@link CcpDbCallsOfTheThread}): when a unit runs,
+	 * the request carries its trace ({@code traceparent}) and the id of the call ({@code X-Opaque-Id}), which Elasticsearch
+	 * writes in its slowlogs, and the call is recorded with the latency seen here and the {@code took} of the response.
+	 * The call is recorded before the response is checked, so a refused status is measured too.
+	 * @param <V> the result type
+	 * @param trace identifier of the request in error messages
+	 * @param relativePath the path after the address of the database
+	 * @param path the whole URL
+	 * @param method the HTTP method
+	 * @param http checks the status and routes the response
+	 * @param headers the headers of the request
+	 * @param body the request body
+	 * @param transformer turns the response into the result
+	 * @return the result
+	 */
+	private <V> V executeMeasured(String trace, String relativePath, String path, CcpHttpMethods method, CcpHttpHandler http, CcpJsonRepresentation headers, String body, CcpHttpResponseTransform<V> transformer) {
+		boolean notMeasuring = false == CcpDbCallsOfTheThread.isMeasuring();
+		if(notMeasuring) {
+			V response = http.executeHttpRequest(trace, method, headers, body, transformer);
+			return response;
+		}
+		int sequence = CcpDbCallsOfTheThread.getNextSequence();
+		CcpJsonRepresentation headersWithTrace = getHeadersWithTrace(headers, sequence);
+		long startedAt = System.nanoTime();
+		CcpHttpResponse response = http.ccpHttp.executeHttpRequest(path, method, headersWithTrace, body);
+		long finishedAt = System.nanoTime();
+		long elapsedNanos = finishedAt - startedAt;
+		double elapsedMs = elapsedNanos / 1_000_000.0;
+		double clientMs = CcpDbCallsOfTheThread.roundToTenths(elapsedMs);
+		String methodName = method.name();
+		int requestBytes = body.length();
+		String responseBody = response.httpResponse;
+		int responseBytes = responseBody.length();
+		CcpJsonRepresentation call = CcpOtherConstants.EMPTY_JSON
+				.put(CcpDbCallsOfTheThread.Fields.sequence, sequence)
+				.put(JsonFieldNames.method, methodName)
+				.put(JsonFieldNames.path, relativePath)
+				.put(JsonFieldNames.status, response.httpStatus)
+				.put(CcpDbCallsOfTheThread.Fields.clientMs, clientMs)
+				.put(JsonFieldNames.requestBytes, requestBytes)
+				.put(JsonFieldNames.responseBytes, responseBytes);
+		List<String> indices = getIndices(relativePath, body);
+		CcpJsonRepresentation callWithIndices = call.put(JsonFieldNames.indices, indices);
+		CcpJsonRepresentation callWithTook = getCallWithTook(callWithIndices, responseBody);
+		CcpDbCallsOfTheThread.record(callWithTook);
+		V result = http.executeHttpRequest(trace, method, headersWithTrace, body, transformer, response);
+		return result;
+	}
+
+	/**
+	 * The headers plus the trace of the unit ({@code traceparent}, which the indexing slowlog also keeps) and the id of the
+	 * call ({@code X-Opaque-Id}, {@code <trace id>-<sequence>}, which the search slowlog keeps).
+	 * @param headers the headers of the request
+	 * @param sequence the position of the call in the unit
+	 * @return the headers with the trace
+	 */
+	private static CcpJsonRepresentation getHeadersWithTrace(CcpJsonRepresentation headers, int sequence) {
+		String traceId = CcpDbCallsOfTheThread.getTraceId();
+		String newId = CcpDbCallsOfTheThread.newTraceId();
+		String spanId = newId.substring(0, 16);
+		String version = ElasticSearchDbRequesterSpecialWords.TRACEPARENT_VERSION.getValue();
+		String separator = ElasticSearchDbRequesterSpecialWords.TRACE_SEPARATOR.getValue();
+		String sampled = ElasticSearchDbRequesterSpecialWords.TRACEPARENT_SAMPLED.getValue();
+		String traceparent = version + traceId + separator + spanId + sampled;
+		String opaqueId = traceId + separator + sequence;
+		CcpJsonRepresentation headersWithTrace = headers
+				.put(ElasticSearchDbRequesterSpecialWords.traceparent, traceparent)
+				.put(ElasticSearchDbRequesterSpecialWords.X_Opaque_Id, opaqueId);
+		return headersWithTrace;
+	}
+
+	/**
+	 * The indexes a call touches: the ones of the path ({@code /<index1>,<index2>/_search}) and the ones named in the body
+	 * ({@code "_index"} of each item of an {@code _mget} or of each action of a {@code _bulk}), without repetition, in
+	 * alphabetical order. A path that starts with an endpoint ({@code /_mget}, {@code /_cat}) names no index.
+	 * @param relativePath the path after the address of the database
+	 * @param body the request body
+	 * @return the indexes, empty when the call touches none
+	 */
+	private static List<String> getIndices(String relativePath, String body) {
+		List<String> pathIndices = getPathIndices(relativePath);
+		Set<String> indices = new TreeSet<>(pathIndices);
+		Matcher bodyIndices = INDEX_IN_THE_BODY.matcher(body);
+		while (bodyIndices.find()) {
+			String bodyIndex = bodyIndices.group(1);
+			indices.add(bodyIndex);
+		}
+		List<String> sortedIndices = new ArrayList<>(indices);
+		return sortedIndices;
+	}
+
+	/**
+	 * The indexes named in the path: its first segment, split by commas, unless it is an endpoint ({@code _mget},
+	 * {@code _bulk}, {@code _cat}).
+	 * @param relativePath the path after the address of the database
+	 * @return the indexes of the path, empty when the path starts with an endpoint
+	 */
+	private static List<String> getPathIndices(String relativePath) {
+		String indexPathStart = ElasticSearchDbRequesterSpecialWords.INDEX_PATH_START.getValue();
+		boolean startsWithSlash = relativePath.startsWith(indexPathStart);
+		int pathStart = startsWithSlash ? 1 : 0;
+		String pathWithoutSlash = relativePath.substring(pathStart);
+		String segmentEnd = ElasticSearchDbRequesterSpecialWords.PATH_SEGMENT_END.getValue();
+		String[] segments = pathWithoutSlash.split(segmentEnd, 2);
+		String firstSegment = segments[0];
+		String endpointStart = ElasticSearchDbRequesterSpecialWords.ENDPOINT_START.getValue();
+		boolean pathNamesNoIndex = firstSegment.isEmpty() || firstSegment.startsWith(endpointStart);
+		if(pathNamesNoIndex) {
+			return new ArrayList<>();
+		}
+		String indexSeparator = ElasticSearchDbRequesterSpecialWords.INDEX_SEPARATOR.getValue();
+		String[] pathIndices = firstSegment.split(indexSeparator);
+		List<String> pathIndicesList = Arrays.asList(pathIndices);
+		return pathIndicesList;
+	}
+
+	/**
+	 * The call plus the time Elasticsearch reported ({@code took}, in milliseconds), read from the start of the response
+	 * without parsing it: only searches and bulks report one, and they open the response with it.
+	 * @param call the call
+	 * @param responseBody the body of the response
+	 * @return the call with {@code tookMs}, or the call as it is when the response reports no time
+	 */
+	private static CcpJsonRepresentation getCallWithTook(CcpJsonRepresentation call, String responseBody) {
+		String tookStart = ElasticSearchDbRequesterSpecialWords.TOOK_START.getValue();
+		boolean withoutTook = false == responseBody.startsWith(tookStart);
+		if(withoutTook) {
+			return call;
+		}
+		int numberStart = tookStart.length();
+		String tookEnd = ElasticSearchDbRequesterSpecialWords.TOOK_END.getValue();
+		int numberEnd = responseBody.indexOf(tookEnd, numberStart);
+		boolean numberNotClosed = numberEnd < 0;
+		if(numberNotClosed) {
+			return call;
+		}
+		String number = responseBody.substring(numberStart, numberEnd);
+		try {
+			long tookMs = Long.parseLong(number);
+			CcpJsonRepresentation callWithTook = call.put(CcpDbCallsOfTheThread.Fields.tookMs, tookMs);
+			return callWithTook;
+		} catch (NumberFormatException e) {
+			return call;
+		}
 	}
 
 	
@@ -157,9 +312,12 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 				String commaSeparatedResources = resourcesWithoutBrackets.replace(" ", "");
 				String dbUrlWithResources = dbUrlWithSlash +  commaSeparatedResources;
 				String path = dbUrlWithResources + pathSuffix;
+		String indexPathStart = ElasticSearchDbRequesterSpecialWords.INDEX_PATH_START.getValue();
+		String relativePath = indexPathStart + commaSeparatedResources + pathSuffix;
 		CcpJsonRepresentation headers = this.headers;
 		CcpHttpHandler http = new CcpHttpHandler(expectedStatus, path);
-		V response = http.executeHttpRequest(trace, method, headers, body, transformer);
+		String bodyAsJson = body.asUgglyJson();
+		V response = this.executeMeasured(trace, relativePath, path, method, http, headers, bodyAsJson, transformer);
 		return response;
 	}
 
@@ -181,8 +339,8 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 		String dbUrl = this.connectionDetails.getAsString(JsonFieldNames.DB_URL);
 		String path = dbUrl + url;
 		CcpHttpHandler http = new CcpHttpHandler(flows, path);
-		V response = http.executeHttpRequest(trace, method, headers, body, transformer);
-		
+		String bodyAsJson = body.asUgglyJson();
+		V response = this.executeMeasured(trace, url, path, method, http, headers, bodyAsJson, transformer);
 		return response;
 	}
 
@@ -204,8 +362,8 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 		String dbUrl = this.connectionDetails.getAsString(JsonFieldNames.DB_URL);
 		String path = dbUrl + url;
 		CcpHttpHandler http = new CcpHttpHandler(expectedStatus, path);
-		V response = http.executeHttpRequest(trace, method, headers, body, transformer);
-		
+		String bodyAsJson = body.asUgglyJson();
+		V response = this.executeMeasured(trace, url, path, method, http, headers, bodyAsJson, transformer);
 		return response;
 	}
 

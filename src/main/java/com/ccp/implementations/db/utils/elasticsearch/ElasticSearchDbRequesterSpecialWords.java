@@ -28,6 +28,28 @@ enum ElasticSearchDbRequesterSpecialWords implements CcpJsonFieldName{
 	REFRESH_PATH("/_refresh"),
 	/** The name of the refresh in the logs of the database. */
 	REFRESH_TRACE("refreshEntity"),
+	/** The W3C header that carries the trace id; Elasticsearch writes it as {@code trace.id} in the slowlogs. */
+	traceparent("traceparent"),
+	/** The header that identifies one call; Elasticsearch writes it as {@code elasticsearch.slowlog.id} in the search slowlog. */
+	X_Opaque_Id("X-Opaque-Id"),
+	/** The version that opens a {@code traceparent}. */
+	TRACEPARENT_VERSION("00-"),
+	/** The flag (sampled) that closes a {@code traceparent}. */
+	TRACEPARENT_SAMPLED("-01"),
+	/** The separator of the parts of a {@code traceparent} and of an {@code X-Opaque-Id}. */
+	TRACE_SEPARATOR("-"),
+	/** How a response that reports its own time starts (search, bulk). */
+	TOOK_START("{\"took\":"),
+	/** What ends the number of {@code took}. */
+	TOOK_END(","),
+	/** An index named in the body ({@code _mget}, {@code _bulk}): the group 1 is the index. */
+	INDEX_IN_THE_BODY("\"_index\"\\s*:\\s*\"([^\"]+)\""),
+	/** What ends the indexes of a path ({@code /<index1>,<index2>/<endpoint>}) or starts its query string. */
+	PATH_SEGMENT_END("[/?]"),
+	/** What separates the indexes of a path. */
+	INDEX_SEPARATOR(","),
+	/** What starts an endpoint instead of an index ({@code /_mget}, {@code /_bulk}, {@code /_cat}). */
+	ENDPOINT_START("_"),
 ;
 	/** Fields of the connection details and of the index scripts. */
 	static enum JsonFieldNames implements CcpJsonFieldName{
@@ -55,6 +77,16 @@ enum ElasticSearchDbRequesterSpecialWords implements CcpJsonFieldName{
 		include_global_state,
 		/** The details of a snapshot in the response. */
 		snapshot,
+		/** The HTTP method of a measured call. */
+		method,
+		/** The path of a measured call, after the address of the database. */
+		path,
+		/** The HTTP status of a measured call. */
+		status,
+		/** The size of the body sent in a measured call. */
+		requestBytes,
+		/** The size of the body received in a measured call. */
+		responseBytes,
 	}
 	/** The real name. */
 	private final String value;
