@@ -50,6 +50,12 @@ enum ElasticSearchDbRequesterSpecialWords implements CcpJsonFieldName{
 	INDEX_SEPARATOR(","),
 	/** What starts an endpoint instead of an index ({@code /_mget}, {@code /_bulk}, {@code /_cat}). */
 	ENDPOINT_START("_"),
+	/** The value of {@code dynamic} that the mappings forbid in any field (since 2026-11-20). */
+	DYNAMIC_TRUE("true"),
+	/** What joins the name of an object field to the names of its fields, in the messages. */
+	FIELD_PATH_SEPARATOR("."),
+	/** The path of the fields of the root of a mapping, in the messages: empty. */
+	ROOT_PATH(""),
 ;
 	/** Fields of the connection details and of the index scripts. */
 	static enum JsonFieldNames implements CcpJsonFieldName{

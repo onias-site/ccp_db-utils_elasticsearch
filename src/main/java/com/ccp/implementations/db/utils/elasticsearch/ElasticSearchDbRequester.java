@@ -12,6 +12,7 @@ import java.util.stream.Collectors;
 
 import com.ccp.constants.CcpOtherConstants;
 import com.ccp.decorators.CcpCollectionDecorator;
+import com.ccp.decorators.CcpFieldName;
 import com.ccp.decorators.CcpFileDecorator;
 import com.ccp.decorators.CcpFolderDecorator;
 import com.ccp.decorators.CcpErrorInputStreamMissing;
@@ -535,6 +536,8 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 		}
 		
 		CcpJsonRepresentation propertiesJson = mappings.getInnerJson(JsonFieldNames.properties);
+		String rootPath = ElasticSearchDbRequesterSpecialWords.ROOT_PATH.getValue();
+		this.validateNoDynamicField(propertiesJson, entityDetails.entityName, rootPath);
 		Set<String> scriptFields = propertiesJson.fieldSet();
 		CcpEntityField[] fields = entityDetails.allFields;
 		Stream<CcpEntityField> entityFieldsStream = Arrays.asList(fields).stream();
@@ -573,6 +576,37 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 			throw fieldsMissingInScriptError;
 		}
 		return this;
+	}
+
+	/**
+	 * Throws when a field of the mapping, at any depth, has {@code dynamic: true}. Forbidden since 2026-11-20: every key
+	 * written in such an object becomes a new field of the mapping, which grows with the data. An object kept whole, and
+	 * never searched by its keys, is mapped as {@code "type": "object", "enabled": false}: it stays in {@code _source}
+	 * and no field is created for it.
+	 * @param properties the fields of the mapping, or of an object field
+	 * @param entityName the entity, for the message
+	 * @param path the path of the object that holds these fields, ending with a dot, or empty for the root
+	 * @throws CcpErrorDbUtilsIncorrectEntityFields when a field has {@code dynamic: true}
+	 */
+	void validateNoDynamicField(CcpJsonRepresentation properties, String entityName, String path) {
+		Set<String> fieldNames = properties.fieldSet();
+		String forbiddenDynamic = ElasticSearchDbRequesterSpecialWords.DYNAMIC_TRUE.getValue();
+		String pathSeparator = ElasticSearchDbRequesterSpecialWords.FIELD_PATH_SEPARATOR.getValue();
+		for (String fieldName : fieldNames) {
+			CcpFieldName field = new CcpFieldName(fieldName);
+			CcpJsonRepresentation definition = properties.getInnerJson(field);
+			String fieldPath = path + fieldName;
+			String dynamic = definition.getAsString(JsonFieldNames.dynamic);
+			boolean dynamicField = forbiddenDynamic.equalsIgnoreCase(dynamic);
+			if(dynamicField) {
+				String messageError = String.format("The field '%s' of the entity '%s' has \"dynamic\": \"true\", which the mappings forbid: "
+						+ "map it as \"type\": \"object\", \"enabled\": false", fieldPath, entityName);
+				throw new CcpErrorDbUtilsIncorrectEntityFields(messageError);
+			}
+			CcpJsonRepresentation innerProperties = definition.getInnerJson(JsonFieldNames.properties);
+			String innerPath = fieldPath + pathSeparator;
+			this.validateNoDynamicField(innerProperties, entityName, innerPath);
+		}
 	}
 
 	/**
