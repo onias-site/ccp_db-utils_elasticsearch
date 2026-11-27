@@ -1,6 +1,7 @@
 package com.ccp.implementations.db.utils.elasticsearch;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
@@ -619,11 +620,7 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 	 * @return the {@code snapshot} of the response: its name, its indexes, its state and its shards
 	 */
 	public CcpJsonRepresentation backup(String bucketName, List<String> entityNamePatterns) {
-		this.loadConnectionProperties();
-		String snapshotPath = ElasticSearchDbRequesterSpecialWords.SNAPSHOT_PATH.getValue();
-		String repositoryPath = snapshotPath + bucketName;
-		CcpJsonRepresentation repository = this.snapshotRepositoryType.getRepository(bucketName);
-		this.executeHttpRequest("registerSnapshotRepository", repositoryPath, CcpHttpMethods.PUT, 200, repository, CcpHttpResponseType.singleRecord);
+		String repositoryPath = this.registerTheSnapshotRepository(bucketName);
 
 		String snapshotNameFormat = ElasticSearchDbRequesterSpecialWords.SNAPSHOT_NAME_FORMAT.getValue();
 		CcpTimeDecorator now = new CcpTimeDecorator();
@@ -638,6 +635,72 @@ class ElasticSearchDbRequester implements CcpDbRequester {
 		CcpJsonRepresentation response = this.executeHttpRequest("createSnapshot", snapshotUrl, CcpHttpMethods.PUT, 200, body, CcpHttpResponseType.singleRecord);
 		CcpJsonRepresentation snapshot = response.getInnerJson(JsonFieldNames.snapshot);
 		return snapshot;
+	}
+
+	/**
+	 * Registers (idempotent) the repository of the snapshots of the bucket, of the kind of
+	 * {@code elasticsearch.snapshot.repository}.
+	 * @param bucketName the bucket
+	 * @return the path of the repository
+	 */
+	private String registerTheSnapshotRepository(String bucketName) {
+		this.loadConnectionProperties();
+		String snapshotPath = ElasticSearchDbRequesterSpecialWords.SNAPSHOT_PATH.getValue();
+		String repositoryPath = snapshotPath + bucketName;
+		CcpJsonRepresentation repository = this.snapshotRepositoryType.getRepository(bucketName);
+		this.executeHttpRequest("registerSnapshotRepository", repositoryPath, CcpHttpMethods.PUT, 200, repository, CcpHttpResponseType.singleRecord);
+		return repositoryPath;
+	}
+
+	/**
+	 * Deletes, in a single request, every snapshot of the repository of the bucket but the most recent one in the state
+	 * {@code SUCCESS} (by its start), which is kept, and the ones still running. Without any snapshot in the state
+	 * {@code SUCCESS} nothing is deleted.
+	 * @param bucketName the bucket
+	 * @return {@code latestBackup} and {@code deletedBackups}
+	 */
+	public CcpJsonRepresentation deleteTheBackupsBeforeTheLatest(String bucketName) {
+		String repositoryPath = this.registerTheSnapshotRepository(bucketName);
+		String allSnapshots = ElasticSearchDbRequesterSpecialWords.ALL_SNAPSHOTS.getValue();
+		String allSnapshotsUrl = repositoryPath + allSnapshots;
+		String noBody = CcpOtherConstants.EMPTY_STRING.getValue();
+		CcpJsonRepresentation response = this.executeHttpRequest("listSnapshots", allSnapshotsUrl, CcpHttpMethods.GET, 200, noBody, CcpOtherConstants.EMPTY_JSON, CcpHttpResponseType.singleRecord);
+		List<CcpJsonRepresentation> snapshots = response.getAsJsonList(JsonFieldNames.snapshots);
+		String success = ElasticSearchDbRequesterSpecialWords.SNAPSHOT_SUCCESS.getValue();
+		String inProgress = ElasticSearchDbRequesterSpecialWords.SNAPSHOT_IN_PROGRESS.getValue();
+		List<CcpJsonRepresentation> successfulSnapshots = snapshots.stream()
+				.filter(snapshot -> success.equals(snapshot.getAsString(JsonFieldNames.state)))
+				.sorted(Comparator.comparing(snapshot -> snapshot.getAsLongNumber(JsonFieldNames.start_time_in_millis)))
+				.collect(Collectors.toList());
+		CcpJsonRepresentation nothingDeleted = CcpOtherConstants.EMPTY_JSON.put(CcpDbRequester.BackupFields.deletedBackups, List.of());
+		boolean withoutASuccessfulBackup = successfulSnapshots.isEmpty();
+
+		if(withoutASuccessfulBackup) {
+			return nothingDeleted;
+		}
+
+		int lastPosition = successfulSnapshots.size() - 1;
+		CcpJsonRepresentation latestSnapshot = successfulSnapshots.get(lastPosition);
+		String latestBackup = latestSnapshot.getAsString(JsonFieldNames.snapshot);
+		List<String> backupsToDelete = snapshots.stream()
+				.filter(snapshot -> false == inProgress.equals(snapshot.getAsString(JsonFieldNames.state)))
+				.map(snapshot -> snapshot.getAsString(JsonFieldNames.snapshot))
+				.filter(snapshotName -> false == latestBackup.equals(snapshotName))
+				.collect(Collectors.toList());
+		CcpJsonRepresentation withTheLatest = nothingDeleted.put(CcpDbRequester.BackupFields.latestBackup, latestBackup);
+		boolean nothingToDelete = backupsToDelete.isEmpty();
+
+		if(nothingToDelete) {
+			return withTheLatest;
+		}
+
+		String snapshotSeparator = ElasticSearchDbRequesterSpecialWords.SNAPSHOT_SEPARATOR.getValue();
+		String snapshotNames = String.join(snapshotSeparator, backupsToDelete);
+		String snapshotPathSeparator = ElasticSearchDbRequesterSpecialWords.SNAPSHOT_PATH_SEPARATOR.getValue();
+		String deleteUrl = repositoryPath + snapshotPathSeparator + snapshotNames;
+		this.executeHttpRequest("deleteSnapshots", deleteUrl, CcpHttpMethods.DELETE, 200, noBody, CcpOtherConstants.EMPTY_JSON, CcpHttpResponseType.singleRecord);
+		CcpJsonRepresentation withTheDeleted = withTheLatest.put(CcpDbRequester.BackupFields.deletedBackups, backupsToDelete);
+		return withTheDeleted;
 	}
 
 	/**

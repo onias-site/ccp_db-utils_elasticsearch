@@ -22,6 +22,16 @@ enum ElasticSearchDbRequesterSpecialWords implements CcpJsonFieldName{
 	WAIT_FOR_COMPLETION("?wait_for_completion=true"),
 	/** The pattern of the name of a backup: {@code backup-} plus the date and time, to the millisecond, it started. */
 	SNAPSHOT_NAME_FORMAT("'backup-'yyyyMMdd-HHmmss-SSS"),
+	/** The suffix of the path of a repository that lists all its snapshots. */
+	ALL_SNAPSHOTS("/_all"),
+	/** The state of a snapshot that went well. */
+	SNAPSHOT_SUCCESS("SUCCESS"),
+	/** The state of a snapshot still running, which is never deleted. */
+	SNAPSHOT_IN_PROGRESS("IN_PROGRESS"),
+	/** What separates the names of the snapshots of a delete. */
+	SNAPSHOT_SEPARATOR(","),
+	/** What separates the repository from its snapshots in a path. */
+	SNAPSHOT_PATH_SEPARATOR("/"),
 	/** The start of the path of an index. */
 	INDEX_PATH_START("/"),
 	/** What makes an index show what was just written. */
@@ -81,8 +91,14 @@ enum ElasticSearchDbRequesterSpecialWords implements CcpJsonFieldName{
 		ignore_unavailable,
 		/** Whether a snapshot also keeps the state of the cluster. */
 		include_global_state,
-		/** The details of a snapshot in the response. */
+		/** The details of a snapshot in the response; the name of a snapshot in the list of a repository. */
 		snapshot,
+		/** The snapshots of a repository. */
+		snapshots,
+		/** The state of a snapshot. */
+		state,
+		/** When a snapshot started. */
+		start_time_in_millis,
 		/** The HTTP method of a measured call. */
 		method,
 		/** The path of a measured call, after the address of the database. */
